@@ -35,10 +35,10 @@ migrate: ## Migrate data/uw_alerts_clean.csv into the dev database
 	DATABASE_URL=$(DB_URL) .venv/bin/python -m scraper.db.migrate
 
 run: ## Run the scraper agent once (requires .env or exported env vars)
-	.venv/bin/python scraper/scraper_agent.py
+	.venv/bin/python -m scraper.scraper_agent
 
 dry-run: ## Run the scraper agent in dry-run mode (no DB writes)
-	DRY_RUN=true .venv/bin/python scraper/scraper_agent.py
+	DRY_RUN=true .venv/bin/python -m scraper.scraper_agent
 
 test: ## Run Flask app unit tests
 	uv run poe test
