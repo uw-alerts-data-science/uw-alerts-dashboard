@@ -19,7 +19,7 @@ dependencies = [
     "geopandas==0.12.2",
     "openai==0.26.5",
     "transformers==4.26.1",
-    "requests==2.28.1",
+    "requests>=2.28.1",
     "beautifulsoup4",
     "python-dotenv==0.21.0",
     "googlemaps==4.10.0",
@@ -30,6 +30,13 @@ dev = [
     "coverage",
     "ruff>=0.5",
     "poethepoet>=0.27",
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "responses>=0.25",
+    "anthropic>=0.36.0",
+    "psycopg2-binary>=2.9",
+    "python-json-logger>=2.0",
+    "googlemaps>=4.10",
 ]
 
 [tool.setuptools.packages.find]
@@ -56,6 +63,10 @@ sequence = [
     { cmd = "coverage run --rcfile=.coverage.rc -m unittest discover", cwd = "uw-alert-web" },
     { cmd = "coverage report", cwd = "uw-alert-web" },
 ]
+
+[tool.poe.tasks.test-scraper]
+help = "Run scraper unit tests"
+cmd = "pytest scraper/tests/ -v"
 
 # ---------------------------------------------------------------------------
 # Ruff config (replaces pylint)
