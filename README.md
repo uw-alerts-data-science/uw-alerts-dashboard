@@ -1,52 +1,134 @@
-# uw-alert-web
+# UW Alerts Dashboard
+
 [![Coverage Status](https://coveralls.io/repos/github/evanyfyip/uw-alert-web/badge.svg?branch=main)](https://coveralls.io/github/evanyfyip/uw-alert-web?branch=main)
-## Group Members:
-- James Joko
-- John Michael
-- Mark Qiao
-- Evan Yip
 
-## Project Type: Tool
+## Overview
 
-## Questions of Interest
-- What area around UW campus is most commonly listed in alerts?
-- What time of day do alerts occur more often?
-- What is the most common type of incident?
-- Have any trends arisen across time in the UW alert system?
+A Flask web application that visualizes University of Washington campus safety alerts on an interactive map. It scrapes the UW Alerts blog, parses incidents using Claude AI, geocodes addresses via Google Maps, and renders a Folium map with heatmap overlays. The repository also includes a production-ready agentic scraper service that polls `emergency.uw.edu` on a schedule and writes normalized incident data to PostgreSQL.
 
-## Goals for the Project
-- Create a web application and visualization of the UW campus and surrounding area.
-- Parse real-time information from the UW alerts system and display the alert's origin.
-- Inform the user of alert trends over time and location
+## Architecture
 
-## Demo video
-[Link to video](https://youtu.be/g1svuXIc0X8)
+```
+UW Alerts Blog (emergency.uw.edu)
+        │
+        ▼
+  scraper/ (Claude agent — runs every 15 min)
+  ├── scrape_uw_blog()       fetch latest alert
+  ├── query_recent_incidents() check for duplicates
+  ├── geocode_address()      Google Maps → lat/lng
+  └── upsert_alert()         write to PostgreSQL
+        │
+        ▼
+   PostgreSQL
+   ├── incidents table
+   └── alerts table
+        │
+        ▼
+  uw-alert-web/ (Flask app)
+  ├── parse_uw_alerts.py     (legacy CSV path)
+  └── visualization_manager/ → Folium map → browser
+```
 
-## Data Sources
-- Seattle GeoData
-  - GIS database for Seattle streets that allows for map visualizations
-  - Link: https://data-seattlecitygis.opendata.arcgis.com/datasets/SeattleCityGIS::seattle-streets-3/explore?location=47.609360%2C-122.325916%2C14.88
-- UW Alerts Blog
-  - Official blogpost maintained by the University of Washington dedicated to reporting incidents may affect students
-  - Link: https://emergency.uw.edu/?_gl=1*ztz313*_ga*MzIwNzY5MTg2LjE2NjU4NzU5NjU.*_ga_3T65WK0BM8*MTY3NjMyNTM5Ny4yMS4wLjE2NzYzMjU0MDEuMC4wLjA.
+## Prerequisites
 
-The following instructions are to be performed in a command line interface from the root directory of the project: 
-- "git clone" the repository to download the latest version of the application
-- conda env create --name uw_alerts_env
-- conda activate uw_alerts_env
-- pip install -e .
-- cd uw-alert-web
-- flask --app=uw-alert-web run
-- We found that on Windows systems, the above command sometimes does not work. Instead, run "python -m flask --app=uw-alert-web run"
+- Python 3.10–3.11
+- [uv](https://docs.astral.sh/uv/) package manager
+- Docker (for local PostgreSQL when running the scraper)
+- API keys: `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_API_KEY`
 
-Our app also requires a .env file in the root directory containing API keys to the services we use. It should look like the following:\
-OPENAI_API_KEY='[INSERT YOUR KEY HERE]'\
-GOOGLE_MAPS_API_KEY='[INSERT YOUR KEY HERE]'\
-MAPBOX_API_KEY='[INSERT YOUR KEY HERE]'
+## Quickstart — Flask App
 
-API Keys can be obtained from the following:\
-[OpenAI](https://platform.openai.com)\
-[Google Maps](https://developers.google.com/maps/documentation/javascript/get-api-key)\
-[Mapbox](https://docs.mapbox.com/help/getting-started/access-tokens/)
+```bash
+# Clone and install
+git clone https://github.com/uw-alerts-data-science/uw-alerts-dashboard.git
+cd uw-alerts-dashboard
+uv sync
 
-The app will now be running on the URL: http://127.0.0.1:5000
+# Create .env file
+cp .env.example .env   # then fill in your keys
+
+# Run
+cd uw-alert-web
+uv run flask --app=uw-alert-web run
+# → http://127.0.0.1:5000
+```
+
+**.env file format:**
+```
+ANTHROPIC_API_KEY='...'
+GOOGLE_MAPS_API_KEY='...'
+MAPBOX_API_KEY='...'
+```
+
+## Scraper Service
+
+The `scraper/` directory contains a Claude-powered agent that polls `emergency.uw.edu` and maintains a normalized PostgreSQL database. It is designed to run as a Kubernetes CronJob every 15 minutes.
+
+### Local Development (requires Docker)
+
+```bash
+make db-up      # start Postgres container
+make schema     # create tables and indexes
+make dry-run    # run agent in dry-run mode (no writes)
+make run        # run agent for real (needs ANTHROPIC_API_KEY etc.)
+make db-shell   # inspect the database
+```
+
+### Environment Variables
+
+| Variable | Description |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude API key |
+| `GOOGLE_MAPS_API_KEY` | Geocoding |
+| `DATABASE_URL` | `postgres://user:pass@host:5432/dbname` |
+| `DRY_RUN` | Set to `true` to log decisions without writing |
+
+### Migration (one-time, to seed PostgreSQL from the legacy CSV)
+
+```bash
+make schema
+make migrate
+```
+
+## Testing
+
+```bash
+uv run poe test          # Flask app tests (42 tests)
+make test-scraper        # Scraper unit tests (20 tests, no DB needed)
+make test-scraper-full   # All scraper tests including DB (requires make schema)
+uv run poe lint          # Lint check
+```
+
+## Project Structure
+
+```
+uw-alert-web/
+  uw-alert-web.py                   # Flask routes
+  parse_uw_alerts/                  # Legacy scraper + GPT parser
+  visualization_manager/            # Folium map generation
+
+scraper/
+  scraper_agent.py                  # Entry point — Claude tool-use loop
+  system_prompt.py                  # Agent system prompt
+  config.py                         # Env var validation
+  logging_config.py                 # JSON structured logging
+  tools/
+    scrape.py                       # Fetch emergency.uw.edu
+    database.py                     # query_recent_incidents, upsert_alert
+    geocode.py                      # Google Maps geocoding
+  db/
+    schema.sql                      # PostgreSQL DDL
+    migrate.py                      # CSV → PostgreSQL migration
+
+data/
+  uw_alerts_clean.csv               # Legacy data store (read-only after migration)
+
+.github/workflows/
+  build_test.yml                    # CI: Flask tests + scraper tests (with Postgres)
+```
+
+## API Keys
+
+- [Anthropic (Claude)](https://console.anthropic.com/)
+- [Google Maps](https://developers.google.com/maps/documentation/javascript/get-api-key)
+- [Mapbox](https://docs.mapbox.com/help/getting-started/access-tokens/)
