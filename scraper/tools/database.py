@@ -3,6 +3,16 @@ import psycopg2, psycopg2.errors
 
 
 def query_recent_incidents(conn, limit: int = 10) -> list:
+    """Return the most recent incidents as a list of dicts.
+
+    Each dict has keys: id, category, nearest_address, first_reported_at
+    (ISO string or None), and latest_alert_text (text of the most recent
+    alert for that incident).
+
+    Args:
+        conn: A psycopg2 connection.
+        limit: Maximum number of incidents to return (default 10).
+    """
     with conn.cursor() as cur:
         cur.execute("""
             SELECT i.id, i.category, i.nearest_address,
@@ -20,6 +30,26 @@ def query_recent_incidents(conn, limit: int = 10) -> list:
 
 
 def upsert_alert(conn, inputs: dict) -> dict:
+    """Insert or update an alert and its parent incident.
+
+    When inputs["is_new_incident"] is True, a new row is inserted into
+    incidents before the alert row. When False, the existing incident
+    (inputs["incident_id"]) has its last_updated_at timestamp refreshed.
+
+    A SHA-256 hash of full_text is stored in alerts.text_hash. If the hash
+    already exists (UniqueViolation), the transaction is rolled back and
+    {"status": "duplicate", "text_hash": <hash>} is returned.
+
+    Args:
+        conn: A psycopg2 connection.
+        inputs: Dict with at minimum "full_text", "is_new_incident", and
+                "alert_type". New incidents also require "incident_id" to be
+                absent; updates require "incident_id".
+
+    Returns:
+        {"status": "inserted", "incident_id": int, "alert_id": int}
+        or {"status": "duplicate", "text_hash": str}
+    """
     full_text = inputs["full_text"]
     text_hash = hashlib.sha256(full_text.encode()).hexdigest()
     is_new = inputs.get("is_new_incident", True)
@@ -34,8 +64,7 @@ def upsert_alert(conn, inputs: dict) -> dict:
                 """, (inputs.get("category"), inputs.get("nearest_address"),
                       inputs.get("google_address"), inputs.get("lat"), inputs.get("lng"),
                       inputs.get("occurred_at"), inputs.get("reported_at")))
-                row = cur.fetchone()
-                incident_id = row[0] if row is not None else None
+                incident_id = (cur.fetchone() or [None])[0]
             else:
                 incident_id = inputs["incident_id"]
                 cur.execute("UPDATE incidents SET last_updated_at=NOW() WHERE id=%s", (incident_id,))
