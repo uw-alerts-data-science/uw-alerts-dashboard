@@ -1,5 +1,6 @@
 import hashlib
-import psycopg2, psycopg2.errors
+import psycopg2
+import psycopg2.errors
 
 
 def query_recent_incidents(conn, limit: int = 10) -> list:

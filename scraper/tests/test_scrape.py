@@ -1,5 +1,6 @@
 # scraper/tests/test_scrape.py
-import pytest, responses as resp_lib, responses
+import pytest
+import responses
 
 GOOD_HTML = """<html><body><div id="main_content">
   <p>June 16, 2026</p>

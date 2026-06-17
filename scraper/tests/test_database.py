@@ -1,6 +1,6 @@
 # scraper/tests/test_database.py
-import hashlib, pytest
-from unittest.mock import MagicMock, patch
+import hashlib
+from unittest.mock import MagicMock
 import psycopg2
 
 def mock_conn(fetchall=None, fetchone=None):

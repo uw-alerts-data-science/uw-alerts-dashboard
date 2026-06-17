@@ -1,5 +1,7 @@
 # scraper/tests/test_schema.py
-import os, pytest, psycopg2
+import os
+import pytest
+import psycopg2
 
 @pytest.fixture(scope="module")
 def db():

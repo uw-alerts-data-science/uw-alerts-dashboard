@@ -1,6 +1,8 @@
-import ast, hashlib, sys
+import ast
+import hashlib
 import pandas as pd
-import psycopg2, psycopg2.errors
+import psycopg2
+import psycopg2.errors
 
 
 def migrate_csv(csv_path: str, conn) -> dict:

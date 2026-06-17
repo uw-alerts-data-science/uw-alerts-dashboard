@@ -1,5 +1,5 @@
 # scraper/tests/test_geocode.py
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 GOOD_RESULT = [{"geometry": {"location": {"lat": 47.657, "lng": -122.303}},
                 "formatted_address": "Padelford Garage, Seattle, WA 98105, USA"}]
