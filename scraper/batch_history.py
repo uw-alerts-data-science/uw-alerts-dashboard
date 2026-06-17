@@ -157,6 +157,11 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
                     if block.name == TERMINAL_TOOL:
                         last_result = result
 
+            if not tool_results:
+                logger.warning("agent_returned_tool_use_with_no_tool_blocks",
+                               extra={"url": article.get("article_url")})
+                return {"status": "error", "error": "tool_use stop_reason with no tool_use blocks"}
+
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
 
@@ -245,6 +250,10 @@ def _process_batch_worker(urls: list, config: dict) -> list:
         except Exception:
             pass
         logger.error("worker_crashed", extra={"error": str(e)})
+        # Surface any URLs that were never attempted due to the crash
+        processed = len(results)
+        for url in urls[processed:]:
+            results.append({"status": "error", "error": str(e), "url": url})
     finally:
         db_conn.close()
     return results
@@ -252,7 +261,9 @@ def _process_batch_worker(urls: list, config: dict) -> list:
 
 def _chunk(lst: list, n: int) -> list:
     """Split lst into n roughly equal chunks."""
-    if n <= 0 or not lst:
+    if not lst:
+        return []
+    if n <= 0:
         return [lst]
     k, rem = divmod(len(lst), n)
     chunks, i = [], 0
