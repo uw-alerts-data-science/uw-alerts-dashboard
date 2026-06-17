@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import time
 
@@ -54,6 +55,9 @@ def _dispatch(name, inputs, db_conn, config):
         return {"incidents": query_recent_incidents(db_conn, inputs.get("limit", 10))}
     if name == "geocode_address":
         return geocode_address(inputs["address"], config["GOOGLE_MAPS_API_KEY"])
+    if name in ("upsert_alert", "mark_no_update") and os.environ.get("DRY_RUN", "").lower() == "true":
+        logger.info("dry_run_would_write", extra={"tool": name, "inputs": inputs})
+        return {"status": "dry_run"}
     if name == "upsert_alert":
         result = upsert_alert(db_conn, inputs)
         if result["status"] == "inserted":
