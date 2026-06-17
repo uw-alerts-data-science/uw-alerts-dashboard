@@ -26,7 +26,7 @@ def _make_json_formatter() -> _RenamedJsonFormatter:
 
 def setup_logging(name: str = "scraper") -> logging.Logger:
     logger = logging.getLogger(name)
-    if logger.handlers:
+    if any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, _RenamedJsonFormatter) for h in logger.handlers):
         return logger
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(_make_json_formatter())

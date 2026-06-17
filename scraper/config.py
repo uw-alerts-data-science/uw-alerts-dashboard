@@ -1,8 +1,9 @@
 import os
 import sys
-import logging
 
-logger = logging.getLogger("scraper")
+from scraper.logging_config import setup_logging
+
+logger = setup_logging("scraper")
 REQUIRED_ENV_VARS = ["ANTHROPIC_API_KEY", "GOOGLE_MAPS_API_KEY", "DATABASE_URL"]
 
 
