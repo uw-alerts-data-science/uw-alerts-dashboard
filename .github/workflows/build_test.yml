@@ -45,8 +45,44 @@ jobs:
           flag-name: run ${{ join(matrix.*, ' - ') }}
           parallel: true
 
+  test_scraper:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: uw_alerts_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Apply schema
+        run: psql postgres://postgres:postgres@localhost/uw_alerts_test -f scraper/db/schema.sql
+
+      - name: Run scraper tests
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost/uw_alerts_test
+        run: uv run poe test-scraper
+
   finish:
-    needs: build_test
+    needs: [build_test, test_scraper]
     if: ${{ always() }}
     runs-on: macos-latest
     steps:
