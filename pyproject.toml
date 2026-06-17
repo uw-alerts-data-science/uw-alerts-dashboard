@@ -36,7 +36,6 @@ dev = [
     "anthropic>=0.36.0",
     "psycopg2-binary>=2.9",
     "python-json-logger>=2.0",
-    "googlemaps>=4.10",
 ]
 
 [tool.setuptools.packages.find]
@@ -83,3 +82,6 @@ ignore = [
     "W291",       # trailing whitespace — present in multi-line test strings, unsafe to auto-fix
     "W293",       # whitespace on blank line — same reason as W291
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
