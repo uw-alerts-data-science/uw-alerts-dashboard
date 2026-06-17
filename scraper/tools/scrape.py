@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import time
 import requests
 from bs4 import BeautifulSoup
 
@@ -126,8 +127,11 @@ def scrape_article_urls(page_num: int) -> list:
     return urls
 
 
-def scrape_article(url: str) -> dict:
+def scrape_article(url: str, max_retries: int = 3) -> dict:
     """Fetch an individual article permalink and return its text content.
+
+    Retries up to max_retries times on 429 Too Many Requests, respecting the
+    Retry-After header when present.
 
     Returns a dict with keys:
         raw_text:    text extracted from the <article> element
@@ -139,12 +143,27 @@ def scrape_article(url: str) -> dict:
 
     Args:
         url: Full permalink URL of the article to fetch.
+        max_retries: Maximum number of retry attempts on 429 (default 3).
     """
-    try:
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
-    except Exception as e:
-        raise ScrapingError(f"Failed to fetch article {url}: {e}") from e
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.get(url, timeout=10)
+        except Exception as e:
+            raise ScrapingError(f"Failed to fetch article {url}: {e}") from e
+
+        if resp.status_code == 429:
+            if attempt == max_retries:
+                raise ScrapingError(f"Failed to fetch article {url}: 429 Too Many Requests after {max_retries} retries")
+            wait = int(resp.headers.get("Retry-After", 2 ** (attempt + 1)))
+            time.sleep(wait)
+            continue
+
+        try:
+            resp.raise_for_status()
+        except Exception as e:
+            raise ScrapingError(f"Failed to fetch article {url}: {e}") from e
+
+        break
 
     soup = BeautifulSoup(resp.text, "html.parser")
     main = soup.find("main", class_="site-main")

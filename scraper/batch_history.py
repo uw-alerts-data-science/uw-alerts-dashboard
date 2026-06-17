@@ -18,6 +18,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -36,6 +37,9 @@ logger = setup_logging("scraper.batch")
 DEFAULT_MAX_PAGES = 50
 DEFAULT_PROCESS_WORKERS = 50
 DISCOVERY_WORKERS = 10
+# Limits concurrent HTTP fetches across all workers to avoid 429s.
+# LLM calls are not gated — only the scrape_article step.
+_FETCH_SEMAPHORE = threading.Semaphore(int(os.environ.get("MAX_CONCURRENT_FETCHES", 10)))
 
 BATCH_TOOLS = [
     {
@@ -236,7 +240,8 @@ def _process_batch_worker(urls: list, config: dict) -> list:
     try:
         for url in urls:
             try:
-                article = scrape_article(url)
+                with _FETCH_SEMAPHORE:
+                    article = scrape_article(url)
             except Exception as e:
                 logger.error("article_scrape_failed", extra={"url": url, "error": str(e)})
                 results.append({"status": "error", "error": str(e), "url": url})
