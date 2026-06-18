@@ -30,7 +30,11 @@ def query_incidents_as_dataframe(hours: int | None = None) -> pd.DataFrame:
         Nearest Address to Incident, Date, Report Time, geometry
     """
     if hours is not None:
-        where_clause = "WHERE i.lat IS NOT NULL AND i.first_reported_at >= NOW() - (INTERVAL '1 hour' * %s)"
+        # Match legacy CSV behavior: filter by the alert's published timestamp.
+        where_clause = (
+            "WHERE i.lat IS NOT NULL "
+            "AND COALESCE(a.reported_at, i.first_reported_at) >= NOW() - (INTERVAL '1 hour' * %s)"
+        )
         params: tuple = (hours,)
     else:
         where_clause = "WHERE i.lat IS NOT NULL"
@@ -43,13 +47,13 @@ def query_incidents_as_dataframe(hours: int | None = None) -> pd.DataFrame:
             i.category,
             COALESCE(a.summary, a.full_text)            AS alert_text,
             i.nearest_address,
-            i.first_reported_at,
+            COALESCE(a.reported_at, i.first_reported_at) AS reported_at,
             i.lat,
             i.lng
         FROM incidents i
         JOIN alerts a ON a.incident_id = i.id
         {where_clause}
-        ORDER BY i.first_reported_at DESC
+        ORDER BY COALESCE(a.reported_at, i.first_reported_at) DESC NULLS LAST
     """
 
     conn = None
