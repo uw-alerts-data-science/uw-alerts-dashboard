@@ -6,7 +6,9 @@ import psycopg2
 
 @pytest.fixture(scope="module")
 def db():
-    url = os.environ.get("TEST_DATABASE_URL", "postgres://localhost/uw_alerts_test")
+    url = os.environ.get("TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("TEST_DATABASE_URL not set; skipping Postgres integration tests")
     conn = psycopg2.connect(url)
     yield conn
     conn.close()
