@@ -14,6 +14,7 @@ Usage:
     BATCH_WORKERS=50 python -m scraper.batch_history
     python -m scraper.batch_history --max-pages 30 --workers 20
 """
+
 import argparse
 import json
 import os
@@ -30,7 +31,7 @@ from scraper.config import get_anthropic_client, get_model_name, load_config
 from scraper.logging_config import setup_logging
 from scraper.tools.database import upsert_alert
 from scraper.tools.geocode import geocode_address
-from scraper.tools.scrape import ScrapingError, scrape_article, scrape_article_urls
+from scraper.tools.scrape import scrape_article, scrape_article_urls
 
 logger = setup_logging("scraper.batch")
 
@@ -39,7 +40,9 @@ DEFAULT_PROCESS_WORKERS = 50
 DISCOVERY_WORKERS = 10
 # Limits concurrent HTTP fetches across all workers to avoid 429s.
 # LLM calls are not gated — only the scrape_article step.
-_FETCH_SEMAPHORE = threading.Semaphore(int(os.environ.get("MAX_CONCURRENT_FETCHES", 10)))
+_FETCH_SEMAPHORE = threading.Semaphore(
+    int(os.environ.get("MAX_CONCURRENT_FETCHES", 10))
+)
 
 BATCH_TOOLS = [
     {
@@ -53,11 +56,17 @@ BATCH_TOOLS = [
     },
     {
         "name": "upsert_alert",
-        "description": "Insert the parsed alert into the database as a new incident.",
+        "description": (
+            "Insert one alert into the database. For the original post call with "
+            "is_new_incident=true — the response includes incident_id. For every "
+            "subsequent update call with is_new_incident=false and that incident_id."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "alert_type": {"type": "string", "enum": ["original"]},
+                "is_new_incident": {"type": "boolean"},
+                "incident_id": {"type": "integer"},
+                "alert_type": {"type": "string", "enum": ["original", "update"]},
                 "category": {"type": "string"},
                 "nearest_address": {"type": "string"},
                 "google_address": {"type": "string"},
@@ -65,17 +74,16 @@ BATCH_TOOLS = [
                 "lng": {"type": "number"},
                 "occurred_at": {"type": "string"},
                 "reported_at": {"type": "string"},
+                "incident_time": {"type": "string"},
                 "summary": {"type": "string"},
                 "full_text": {"type": "string"},
                 "raw_scraped_text": {"type": "string"},
                 "source_url": {"type": "string"},
             },
-            "required": ["alert_type", "full_text", "raw_scraped_text"],
+            "required": ["is_new_incident", "alert_type", "full_text", "raw_scraped_text"],
         },
     },
 ]
-
-TERMINAL_TOOL = "upsert_alert"
 
 
 def _dispatch(name, inputs, db_conn, config, dry_run):
@@ -84,18 +92,20 @@ def _dispatch(name, inputs, db_conn, config, dry_run):
     if name == "upsert_alert":
         if dry_run:
             logger.info("dry_run_would_write", extra={"inputs": inputs})
-            return {"status": "dry_run"}
-        payload = dict(inputs)
-        payload["is_new_incident"] = True
-        payload["alert_type"] = "original"
-        result = upsert_alert(db_conn, payload)
+            return {"status": "dry_run", "incident_id": 0}
+        result = upsert_alert(db_conn, inputs)
         if result["status"] == "inserted":
-            logger.info("insert_success", extra={
-                "incident_id": result.get("incident_id"),
-                "alert_id": result.get("alert_id"),
-            })
+            logger.info(
+                "insert_success",
+                extra={
+                    "incident_id": result.get("incident_id"),
+                    "alert_id": result.get("alert_id"),
+                },
+            )
         else:
-            logger.warning("duplicate_blocked", extra={"text_hash": result.get("text_hash")})
+            logger.warning(
+                "duplicate_blocked", extra={"text_hash": result.get("text_hash")}
+            )
         return result
     raise ValueError(f"Unknown tool: {name}")
 
@@ -103,8 +113,13 @@ def _dispatch(name, inputs, db_conn, config, dry_run):
 def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
     """Run the LLM agent for one pre-scraped article.
 
-    Returns a dict with at minimum a "status" key:
-    "inserted", "duplicate", "dry_run", or "error".
+    The agent parses the article into individual alert blocks (original post +
+    all updates) and calls upsert_alert once per block. It runs until end_turn.
+
+    Returns a summary dict with keys:
+        status:           "inserted" | "duplicate" | "dry_run" | "error"
+        alerts_inserted:  number of alert rows successfully inserted
+        alerts_duplicate: number skipped due to text_hash collision
     """
     dry_run = os.environ.get("DRY_RUN", "").lower() == "true"
     client = get_anthropic_client(config)
@@ -114,13 +129,15 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
         {
             "role": "user",
             "content": (
-                "Parse and store this UW emergency alert.\n\n"
+                "Parse and store this UW emergency alert article.\n\n"
                 f"Article text:\n{article['raw_text']}\n\n"
                 f"Source URL: {article.get('article_url', 'https://emergency.uw.edu/')}\n"
                 f"Scraped at: {article['scraped_at']}"
             ),
         }
     ]
+
+    upsert_results = []
 
     try:
         while True:
@@ -137,18 +154,15 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
                 except anthropic.APIError as e:
                     if attempt == 2:
                         logger.error("claude_api_failed", extra={"error": str(e)})
-                        return {"status": "error", "error": str(e)}
+                        return {"status": "error", "error": str(e),
+                                "alerts_inserted": 0, "alerts_duplicate": 0}
                     wait = 2 ** (attempt + 1)
                     time.sleep(wait)
 
             if response.stop_reason == "end_turn":
-                logger.warning("agent_ended_without_terminal_tool",
-                               extra={"url": article.get("article_url")})
-                return {"status": "error", "error": "agent ended without calling upsert_alert"}
+                break
 
             tool_results = []
-            last_result = {}
-
             for block in response.content:
                 if block.type == "tool_use":
                     logger.info("tool_call", extra={"tool": block.name})
@@ -158,23 +172,53 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
                         "tool_use_id": block.id,
                         "content": json.dumps(result),
                     })
-                    if block.name == TERMINAL_TOOL:
-                        last_result = result
+                    if block.name == "upsert_alert":
+                        upsert_results.append(result)
 
             if not tool_results:
-                logger.warning("agent_returned_tool_use_with_no_tool_blocks",
-                               extra={"url": article.get("article_url")})
-                return {"status": "error", "error": "tool_use stop_reason with no tool_use blocks"}
+                logger.warning(
+                    "agent_returned_tool_use_with_no_tool_blocks",
+                    extra={"url": article.get("article_url")},
+                )
+                return {
+                    "status": "error",
+                    "error": "tool_use stop_reason with no tool_use blocks",
+                    "alerts_inserted": 0, "alerts_duplicate": 0,
+                }
 
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
 
-            if last_result:
-                return last_result
+        if not upsert_results:
+            logger.warning(
+                "agent_ended_without_upsert",
+                extra={"url": article.get("article_url")},
+            )
+            return {"status": "error", "error": "agent ended without calling upsert_alert",
+                    "alerts_inserted": 0, "alerts_duplicate": 0}
+
+        inserted = sum(1 for r in upsert_results if r.get("status") == "inserted")
+        duplicate = sum(1 for r in upsert_results if r.get("status") == "duplicate")
+        dry = sum(1 for r in upsert_results if r.get("status") == "dry_run")
+
+        if dry:
+            status = "dry_run"
+        elif inserted:
+            status = "inserted"
+        else:
+            status = "duplicate"
+
+        logger.info("article_complete", extra={
+            "url": article.get("article_url"),
+            "alerts_inserted": inserted,
+            "alerts_duplicate": duplicate,
+        })
+        return {"status": status, "alerts_inserted": inserted, "alerts_duplicate": duplicate}
 
     except Exception as e:
         logger.error("batch_agent_error", extra={"error": str(e)})
-        return {"status": "error", "error": str(e)}
+        return {"status": "error", "error": str(e),
+                "alerts_inserted": 0, "alerts_duplicate": 0}
 
 
 def _try_scrape_article_urls(page_num: int) -> list:
@@ -182,7 +226,9 @@ def _try_scrape_article_urls(page_num: int) -> list:
     try:
         urls = scrape_article_urls(page_num)
         if urls:
-            logger.info("page_scraped", extra={"page": page_num, "url_count": len(urls)})
+            logger.info(
+                "page_scraped", extra={"page": page_num, "url_count": len(urls)}
+            )
         return urls
     except Exception as e:
         logger.debug("page_scrape_failed", extra={"page": page_num, "error": str(e)})
@@ -243,7 +289,9 @@ def _process_batch_worker(urls: list, config: dict) -> list:
                 with _FETCH_SEMAPHORE:
                     article = scrape_article(url)
             except Exception as e:
-                logger.error("article_scrape_failed", extra={"url": url, "error": str(e)})
+                logger.error(
+                    "article_scrape_failed", extra={"url": url, "error": str(e)}
+                )
                 results.append({"status": "error", "error": str(e), "url": url})
                 continue
             result = run_batch_agent(article, config, db_conn)
@@ -274,7 +322,7 @@ def _chunk(lst: list, n: int) -> list:
     chunks, i = [], 0
     for chunk_idx in range(n):
         size = k + (1 if chunk_idx < rem else 0)
-        chunks.append(lst[i: i + size])
+        chunks.append(lst[i : i + size])
         i += size
     return [c for c in chunks if c]
 
@@ -291,7 +339,9 @@ def run_batch(
     Returns 0 on success or partial success; 1 only if nothing was inserted
     and there were errors (indicating a systemic failure).
     """
-    n_workers = max_workers or int(os.environ.get("BATCH_WORKERS", DEFAULT_PROCESS_WORKERS))
+    n_workers = max_workers or int(
+        os.environ.get("BATCH_WORKERS", DEFAULT_PROCESS_WORKERS)
+    )
 
     # Phase 1: discover URLs
     all_urls = _discover_article_urls(start_page, end_page, max_pages)
@@ -299,7 +349,9 @@ def run_batch(
 
     # Phase 2: pre-filter
     dry_run = os.environ.get("DRY_RUN", "").lower() == "true"
-    fresh_urls = all_urls if dry_run else _prefilter_known_urls(all_urls, config["DATABASE_URL"])
+    fresh_urls = (
+        all_urls if dry_run else _prefilter_known_urls(all_urls, config["DATABASE_URL"])
+    )
     pre_skipped = len(all_urls) - len(fresh_urls)
 
     stats = {
@@ -318,27 +370,36 @@ def run_batch(
     # Phase 3: parallel workers, each with a batch of URLs
     actual_workers = min(n_workers, len(fresh_urls))
     batches = _chunk(fresh_urls, actual_workers)
-    logger.info("processing_start", extra={
-        "urls_to_process": len(fresh_urls),
-        "workers": actual_workers,
-        "batch_size": len(batches[0]) if batches else 0,
-    })
+    logger.info(
+        "processing_start",
+        extra={
+            "urls_to_process": len(fresh_urls),
+            "workers": actual_workers,
+            "batch_size": len(batches[0]) if batches else 0,
+        },
+    )
 
     with ThreadPoolExecutor(max_workers=actual_workers) as executor:
-        futures = [executor.submit(_process_batch_worker, batch, config) for batch in batches]
+        futures = [
+            executor.submit(_process_batch_worker, batch, config) for batch in batches
+        ]
         for fut in as_completed(futures):
             for result in fut.result():
                 status = result.get("status", "error")
-                if status == "inserted":
-                    stats["inserted"] += 1
-                elif status in ("duplicate", "dry_run"):
-                    stats["duplicates"] += 1
+                if status in ("inserted", "dry_run"):
+                    stats["inserted"] += result.get("alerts_inserted", 0)
+                    stats["duplicates"] += result.get("alerts_duplicate", 0)
+                elif status == "duplicate":
+                    stats["duplicates"] += result.get("alerts_duplicate", 1)
                 else:
                     stats["errors"] += 1
-                    logger.error("article_failed", extra={
-                        "url": result.get("url", ""),
-                        "error": result.get("error", "unknown"),
-                    })
+                    logger.error(
+                        "article_failed",
+                        extra={
+                            "url": result.get("url", ""),
+                            "error": result.get("error", "unknown"),
+                        },
+                    )
 
     logger.info("batch_complete", extra=stats)
     _print_summary(stats)
@@ -347,25 +408,35 @@ def run_batch(
 
 def _print_summary(stats: dict) -> None:
     print(
-        f"\nBatch complete: {stats['inserted']} inserted, "
-        f"{stats['duplicates']} skipped, {stats['errors']} errors "
+        f"\nBatch complete: {stats['inserted']} alerts inserted, "
+        f"{stats['duplicates']} skipped, {stats['errors']} article errors "
         f"({stats['urls_found']} articles across {stats['pages_scanned']} pages scanned)"
     )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parallel UW Alerts history scraper")
-    parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES,
-                        help=f"Max page number to scan (default {DEFAULT_MAX_PAGES})")
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=DEFAULT_MAX_PAGES,
+        help=f"Max page number to scan (default {DEFAULT_MAX_PAGES})",
+    )
     parser.add_argument("--start-page", type=int, default=DEFAULT_MAX_PAGES)
     parser.add_argument("--end-page", type=int, default=1)
-    parser.add_argument("--workers", type=int, default=None,
-                        help=f"Parallel workers (default BATCH_WORKERS env or {DEFAULT_PROCESS_WORKERS})")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help=f"Parallel workers (default BATCH_WORKERS env or {DEFAULT_PROCESS_WORKERS})",
+    )
     args = parser.parse_args()
-    sys.exit(run_batch(
-        load_config(),
-        start_page=args.start_page,
-        end_page=args.end_page,
-        max_pages=args.max_pages,
-        max_workers=args.workers,
-    ))
+    sys.exit(
+        run_batch(
+            load_config(),
+            start_page=args.start_page,
+            end_page=args.end_page,
+            max_pages=args.max_pages,
+            max_workers=args.workers,
+        )
+    )

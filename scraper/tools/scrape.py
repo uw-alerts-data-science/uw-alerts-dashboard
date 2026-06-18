@@ -67,18 +67,22 @@ def scrape_page(page_num: int) -> list:
 
         # Prefer the article's own permalink over the listing page URL
         article_url = url
-        title_el = article.find("h2", class_="entry-title") or article.find("h1", class_="entry-title")
+        title_el = article.find("h2", class_="entry-title") or article.find(
+            "h1", class_="entry-title"
+        )
         if title_el:
             a = title_el.find("a", href=True)
             if a:
                 article_url = a["href"]
 
-        results.append({
-            "raw_text": article.get_text(separator="\n", strip=True),
-            "article_url": article_url,
-            "scraped_at": scraped_at,
-            "page_num": page_num,
-        })
+        results.append(
+            {
+                "raw_text": article.get_text(separator="\n", strip=True),
+                "article_url": article_url,
+                "scraped_at": scraped_at,
+                "page_num": page_num,
+            }
+        )
 
     # WordPress lists newest-first; reverse so callers process oldest-first
     results.reverse()
@@ -114,7 +118,9 @@ def scrape_article_urls(page_num: int) -> list:
         if not article.find("time", class_="entry-date"):
             continue  # skip non-alert articles (nav, promo, etc.)
 
-        title_el = article.find("h2", class_="entry-title") or article.find("h1", class_="entry-title")
+        title_el = article.find("h2", class_="entry-title") or article.find(
+            "h1", class_="entry-title"
+        )
         if not title_el:
             continue
 
@@ -153,7 +159,9 @@ def scrape_article(url: str, max_retries: int = 3) -> dict:
 
         if resp.status_code == 429:
             if attempt == max_retries:
-                raise ScrapingError(f"Failed to fetch article {url}: 429 Too Many Requests after {max_retries} retries")
+                raise ScrapingError(
+                    f"Failed to fetch article {url}: 429 Too Many Requests after {max_retries} retries"
+                )
             wait = int(resp.headers.get("Retry-After", 2 ** (attempt + 1)))
             time.sleep(wait)
             continue

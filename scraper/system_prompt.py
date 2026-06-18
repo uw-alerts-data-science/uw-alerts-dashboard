@@ -12,6 +12,14 @@ ambiguous, leave that field null rather than guessing.
 alert already exists in the database, call mark_no_update. A missed insert is \
 recoverable on the next run. A duplicate write is harmful and erodes trust in the system.
 
+FIELD GUIDE — populate these when available:
+- reported_at: when the alert was published (ISO 8601)
+- occurred_at / incident_time: when the incident happened — set both to the same value
+- source_url: the URL of the alert page being processed
+- category: one of: Theft, Robbery, Assault, Sexual Assault, Suspicious Activity, \
+Suspicious Person, Disturbance, Fire, Medical Emergency, Missing Person, \
+Motor Vehicle Incident, Harassment, Other
+
 DECISION RULES:
 1. Always call scrape_uw_blog first, then query_recent_incidents before deciding.
 2. An alert is a DUPLICATE if its text substantially matches any full_text in recent \

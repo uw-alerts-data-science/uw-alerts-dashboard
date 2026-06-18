@@ -6,6 +6,7 @@ import io
 
 def _make_stream_logger(name):
     from scraper.logging_config import _make_json_formatter
+
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
     handler.setFormatter(_make_json_formatter())

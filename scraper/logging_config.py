@@ -29,7 +29,11 @@ def setup_logging(name: str = "scraper") -> logging.Logger:
     # Child loggers (e.g. "scraper.batch") inherit the handler via propagation
     # and must NOT add their own handler to avoid duplicate log lines.
     root_scraper = logging.getLogger("scraper")
-    if not any(isinstance(h, logging.StreamHandler) and isinstance(h.formatter, _RenamedJsonFormatter) for h in root_scraper.handlers):
+    if not any(
+        isinstance(h, logging.StreamHandler)
+        and isinstance(h.formatter, _RenamedJsonFormatter)
+        for h in root_scraper.handlers
+    ):
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(_make_json_formatter())
         root_scraper.addHandler(handler)

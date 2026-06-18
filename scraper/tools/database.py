@@ -14,20 +14,34 @@ def query_recent_incidents(conn, limit: int = 10) -> list:
         conn: A psycopg2 connection.
         limit: Maximum number of incidents to return (default 10).
     """
-    with conn.cursor() as cur:
-        cur.execute("""
-            SELECT i.id, i.category, i.nearest_address,
-                   i.first_reported_at,
-                   (SELECT full_text FROM alerts WHERE incident_id = i.id
-                    ORDER BY created_at DESC LIMIT 1) AS latest_text
-            FROM incidents i
-            ORDER BY i.first_reported_at DESC
-            LIMIT %s
-        """, (limit,))
-        rows = cur.fetchall()
-    return [{"id": r[0], "category": r[1], "nearest_address": r[2],
-             "first_reported_at": r[3].isoformat() if r[3] else None,
-             "latest_alert_text": r[4]} for r in rows]
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT i.id, i.category, i.nearest_address,
+                       i.first_reported_at,
+                       (SELECT full_text FROM alerts WHERE incident_id = i.id
+                        ORDER BY created_at DESC LIMIT 1) AS latest_text
+                FROM incidents i
+                ORDER BY i.first_reported_at DESC
+                LIMIT %s
+            """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+        return [
+            {
+                "id": r[0],
+                "category": r[1],
+                "nearest_address": r[2],
+                "first_reported_at": r[3].isoformat() if r[3] else None,
+                "latest_alert_text": r[4],
+            }
+            for r in rows
+        ]
+    except psycopg2.Error:
+        conn.rollback()
+        raise
 
 
 def upsert_alert(conn, inputs: dict) -> dict:
@@ -57,31 +71,107 @@ def upsert_alert(conn, inputs: dict) -> dict:
     try:
         with conn.cursor() as cur:
             if is_new:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO incidents
                         (category, nearest_address, google_address, lat, lng,
                          occurred_at, first_reported_at, last_updated_at)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,NOW()) RETURNING id
-                """, (inputs.get("category"), inputs.get("nearest_address"),
-                      inputs.get("google_address"), inputs.get("lat"), inputs.get("lng"),
-                      inputs.get("occurred_at"), inputs.get("reported_at")))
+                """,
+                    (
+                        inputs.get("category"),
+                        inputs.get("nearest_address"),
+                        inputs.get("google_address"),
+                        inputs.get("lat"),
+                        inputs.get("lng"),
+                        inputs.get("occurred_at"),
+                        inputs.get("reported_at"),
+                    ),
+                )
                 incident_id = (cur.fetchone() or [None])[0]
             else:
                 incident_id = inputs["incident_id"]
-                cur.execute("UPDATE incidents SET last_updated_at=NOW() WHERE id=%s", (incident_id,))
+                cur.execute(
+                    "UPDATE incidents SET last_updated_at=NOW() WHERE id=%s",
+                    (incident_id,),
+                )
 
-            cur.execute("""
+            cur.execute(
+                """
                 INSERT INTO alerts
                     (incident_id, alert_type, reported_at, incident_time,
                      summary, full_text, raw_scraped_text, source_url, text_hash)
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id
-            """, (incident_id, inputs.get("alert_type"), inputs.get("reported_at"),
-                  inputs.get("incident_time"), inputs.get("summary"),
-                  full_text, inputs.get("raw_scraped_text"),
-                  "https://emergency.uw.edu/", text_hash))
+            """,
+                (
+                    incident_id,
+                    inputs.get("alert_type"),
+                    inputs.get("reported_at"),
+                    inputs.get("incident_time"),
+                    inputs.get("summary"),
+                    full_text,
+                    inputs.get("raw_scraped_text"),
+                    inputs.get("source_url", "https://emergency.uw.edu/"),
+                    text_hash,
+                ),
+            )
             alert_id = cur.fetchone()[0]
         conn.commit()
         return {"status": "inserted", "incident_id": incident_id, "alert_id": alert_id}
     except psycopg2.errors.UniqueViolation:
         conn.rollback()
         return {"status": "duplicate", "text_hash": text_hash}
+
+
+def search_incidents(conn, keywords: str, limit: int = 5) -> list:
+    """Search incidents by keyword across address, category, and alert text.
+
+    Useful for finding a parent incident when linking update alerts during
+    historical batch import. Returns results ordered newest-first.
+
+    Args:
+        conn: A psycopg2 connection.
+        keywords: Search string matched case-insensitively against nearest_address,
+                  category, and the full_text of any associated alert.
+        limit: Maximum number of results (default 5).
+
+    Returns:
+        List of dicts with keys: id, category, nearest_address,
+        first_reported_at (ISO string or None), first_alert_text.
+    """
+    pattern = f"%{keywords}%"
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT i.id, i.category, i.nearest_address,
+                       i.first_reported_at,
+                       (SELECT full_text FROM alerts
+                        WHERE incident_id = i.id
+                        ORDER BY created_at ASC LIMIT 1) AS first_alert_text
+                FROM incidents i
+                WHERE i.nearest_address ILIKE %s
+                   OR i.category ILIKE %s
+                   OR EXISTS (
+                       SELECT 1 FROM alerts a
+                       WHERE a.incident_id = i.id AND a.full_text ILIKE %s
+                   )
+                ORDER BY i.first_reported_at DESC
+                LIMIT %s
+            """,
+                (pattern, pattern, pattern, limit),
+            )
+            rows = cur.fetchall()
+        return [
+            {
+                "id": r[0],
+                "category": r[1],
+                "nearest_address": r[2],
+                "first_reported_at": r[3].isoformat() if r[3] else None,
+                "first_alert_text": r[4],
+            }
+            for r in rows
+        ]
+    except psycopg2.Error:
+        conn.rollback()
+        raise
