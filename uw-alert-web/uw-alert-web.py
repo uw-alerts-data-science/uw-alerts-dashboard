@@ -6,6 +6,7 @@ for communication between the front end (html files) to the backend (.py files).
 It handles requests from the frontend to update the map with new information.
 """
 
+import ast
 import io
 import os
 import json
@@ -33,7 +34,7 @@ app.default_charset = "utf-8"
 def render_home_page():
     """
     Renders the home page using home.html using
-    the data/uw_alerts_clean.csv file. Displays
+    the database. Displays
     current urgent alerts within the specified time_frame
 
     Returns
@@ -66,7 +67,7 @@ def redirect_to_home():
 def render_demo_page():
     """
     Renders the demo page using demo.html using
-    the data/uw_alerts_clean.csv file. Allows
+    the database. Allows
     for user input to add additional alerts Displays
     current urgent alerts within the specified time_frame
     Purely for demo purposes.
@@ -88,7 +89,7 @@ def render_demo_page():
 def render_past_page():
     """
     Renders the past page using past.html using
-    the data/uw_alerts_clean.csv file. Displays
+    the database. Displays
     all past uw alerts.
 
     Returns
