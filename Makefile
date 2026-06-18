@@ -26,7 +26,6 @@ db-down: ## Stop and remove local Postgres container
 	docker stop uw-alerts-pg && docker rm uw-alerts-pg
 
 db-clear: ## Drop and recreate the dev database (destructive)
-db-clear:
 	docker exec -i uw-alerts-pg psql -U $(DB_USER) -c "DROP DATABASE IF EXISTS $(DB_NAME);"
 	docker exec -i uw-alerts-pg psql -U $(DB_USER) -c "CREATE DATABASE $(DB_NAME);"
 	docker exec -i uw-alerts-pg psql -U $(DB_USER) -c "DROP DATABASE IF EXISTS $(DB_TEST);"
