@@ -20,9 +20,8 @@ def query_incidents_as_dataframe(hours: int | None = None) -> pd.DataFrame:
     Parameters
     ----------
     hours:
-        If given, only return incidents whose first_reported_at is within
-        the last `hours` hours. None returns all incidents.
-
+        If given, only return alerts whose reported_at (fallback: incident first_reported_at)
+        is within the last `hours` hours. None returns all alerts.
     Returns
     -------
     pd.DataFrame with columns:
