@@ -11,6 +11,7 @@ import io
 import os
 import json
 import subprocess
+import sys
 import pandas as pd
 import openai
 import googlemaps
@@ -172,13 +173,14 @@ def fully_update():
     Fully rendered HTML page sent to the front end.
     """
     result = subprocess.run(
-        ["python", "-m", "scraper.scraper_agent"],
+        [sys.executable, "-m", "scraper.scraper_agent"],
         capture_output=True,
         text=True,
         timeout=120,
     )
     if result.returncode != 0:
-        return f"Scraper failed: {result.stderr}", 500
+        app.logger.error("scraper_agent failed: %s", result.stderr)
+        return "Scraper failed. Check server logs for details.", 500
 
     alert_df = db.query_incidents_as_dataframe(hours=24 * 7)
     urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
