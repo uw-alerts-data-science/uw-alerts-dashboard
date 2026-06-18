@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     full_text        TEXT NOT NULL,
     raw_scraped_text TEXT,
     source_url       VARCHAR(500),
-    text_hash        CHAR(64),
+    text_hash        CHAR(64) NOT NULL,
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );
 
