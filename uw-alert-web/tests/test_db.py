@@ -7,6 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pandas as pd
 
+from db import get_connection, query_incidents_as_dataframe
+
 
 class TestQueryIncidentsAsDataframe(unittest.TestCase):
 
@@ -14,7 +16,7 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
         """Return a mock psycopg2 connection whose cursor fetchall returns rows."""
         cur = MagicMock()
         cur.fetchall.return_value = rows
-        cur.__enter__ = lambda s: s
+        cur.__enter__ = MagicMock(return_value=cur)
         cur.__exit__ = MagicMock(return_value=False)
         conn = MagicMock()
         conn.cursor.return_value = cur
@@ -22,7 +24,6 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
 
     @patch("db.get_connection")
     def test_returns_dataframe_with_correct_columns(self, mock_get_conn):
-        from db import query_incidents_as_dataframe
         ts = datetime(2024, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
         conn, _ = self._make_conn([
             (1, 10, "Robbery", "Pepper spray robbery", "12th Ave NE", ts, 47.656, -122.315),
@@ -36,10 +37,10 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
             "Nearest Address to Incident", "Date", "Report Time", "geometry",
         }
         self.assertEqual(set(df.columns), expected_cols)
+        self.assertEqual(len(df), 1)  # confirm row was processed, not just empty schema
 
     @patch("db.get_connection")
     def test_maps_row_values_correctly(self, mock_get_conn):
-        from db import query_incidents_as_dataframe
         ts = datetime(2024, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
         conn, _ = self._make_conn([
             (1, 10, "Robbery", "A robbery occurred", "12th Ave NE", ts, 47.656, -122.315),
@@ -60,7 +61,6 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
 
     @patch("db.get_connection")
     def test_empty_result_returns_empty_dataframe_with_columns(self, mock_get_conn):
-        from db import query_incidents_as_dataframe
         conn, _ = self._make_conn([])
         mock_get_conn.return_value = conn
 
@@ -72,7 +72,6 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
 
     @patch("db.get_connection")
     def test_hours_filter_passes_param(self, mock_get_conn):
-        from db import query_incidents_as_dataframe
         conn, cur = self._make_conn([])
         mock_get_conn.return_value = conn
 
@@ -85,7 +84,6 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
 
     @patch("db.get_connection")
     def test_null_reported_at_produces_none_date(self, mock_get_conn):
-        from db import query_incidents_as_dataframe
         conn, _ = self._make_conn([
             (2, 20, "Theft", "Theft occurred", "Red Square", None, 47.655, -122.310),
         ])
@@ -98,9 +96,7 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
         self.assertIsNone(row["Report Time"])
 
     def test_get_connection_raises_without_env(self):
-        from db import get_connection
         with patch.dict(os.environ, {}, clear=True):
-            os.environ.pop("DATABASE_URL", None)
             with self.assertRaises(RuntimeError):
                 get_connection()
 
