@@ -30,7 +30,7 @@ def query_incidents_as_dataframe(hours: int | None = None) -> pd.DataFrame:
         Nearest Address to Incident, Date, Report Time, geometry
     """
     if hours is not None:
-        where_clause = "WHERE i.lat IS NOT NULL AND i.first_reported_at >= NOW() - INTERVAL '%s hours'"
+        where_clause = "WHERE i.lat IS NOT NULL AND i.first_reported_at >= NOW() - (INTERVAL '1 hour' * %s)"
         params: tuple = (hours,)
     else:
         where_clause = "WHERE i.lat IS NOT NULL"
@@ -52,13 +52,15 @@ def query_incidents_as_dataframe(hours: int | None = None) -> pd.DataFrame:
         ORDER BY i.first_reported_at DESC
     """
 
-    conn = get_connection()
+    conn = None
     try:
+        conn = get_connection()
         with conn.cursor() as cur:
             cur.execute(sql, params)
             rows = cur.fetchall()
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
     if not rows:
         return pd.DataFrame(columns=[
