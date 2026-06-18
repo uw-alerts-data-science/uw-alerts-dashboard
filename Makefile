@@ -7,7 +7,9 @@ DB_PORT     = 5432
 DB_URL      = postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_NAME)
 TEST_DB_URL = postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_TEST)
 
-.PHONY: db-up db-down db-shell schema migrate run dry-run batch-history batch-history-dry seed audit test test-scraper test-scraper-full lint serve help
+FLASK_PID_FILE = .flask.pid
+
+.PHONY: db-up db-down db-shell schema migrate run dry-run batch-history batch-history-dry seed audit test test-scraper test-scraper-full lint serve serve-up serve-down help
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -42,8 +44,16 @@ schema: ## Apply database schema (creates tables and indexes)
 migrate: ## Migrate data/uw_alerts_clean.csv into the dev database
 	DATABASE_URL=$(DB_URL) .venv/bin/python -m scraper.db.migrate
 
-serve: ## Start the Flask web app (requires .env or exported env vars)
+serve: ## Start the Flask web app in the foreground (requires .env)
 	set -a && . ./.env && set +a && cd uw-alert-web && uv run flask --app=uw-alert-web run
+
+serve-up: ## Start the Flask web app in the background (requires .env)
+	set -a && . ./.env && set +a && cd uw-alert-web && uv run flask --app=uw-alert-web run & echo $$! > $(FLASK_PID_FILE)
+	@sleep 1 && echo "Flask starting on http://127.0.0.1:5000 (PID $$(cat $(FLASK_PID_FILE)))"
+
+serve-down: ## Stop the background Flask web app
+	@pkill -f "flask.*uw-alert-web" 2>/dev/null && echo "Flask stopped." || echo "No Flask process found."; \
+	  rm -f $(FLASK_PID_FILE)
 
 run: ## Run the scraper agent once (requires .env or exported env vars)
 	set -a && . ./.env && set +a && .venv/bin/python -m scraper.scraper_agent
