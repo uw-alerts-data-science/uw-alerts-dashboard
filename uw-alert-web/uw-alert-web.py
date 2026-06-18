@@ -28,6 +28,8 @@ from .visualization_manager.visualization_manager import (
 from .parse_uw_alerts import parse_uw_alerts
 from . import db
 
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
 app.default_charset = "utf-8"
 
@@ -177,6 +179,7 @@ def fully_update():
         capture_output=True,
         text=True,
         timeout=120,
+        cwd=_REPO_ROOT,
     )
     if result.returncode != 0:
         app.logger.error("scraper_agent failed: %s", result.stderr)
