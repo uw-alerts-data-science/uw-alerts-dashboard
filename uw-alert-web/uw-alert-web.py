@@ -10,6 +10,7 @@ import ast
 import io
 import os
 import json
+import subprocess
 import pandas as pd
 import openai
 import googlemaps
@@ -163,30 +164,28 @@ def update_map():
 @app.route("/fully_update", methods=["GET"])
 def fully_update():
     """
-    Scrape the UW Blog website and creates a folium map with
-    new data if it exists.
+    Runs the scraper agent to fetch new alerts, then renders
+    the home page with the latest data from the database.
 
     Returns
     -------
-    Fully rendered HTML page that is sent to the
-    front end to display the updated map.
-
+    Fully rendered HTML page sent to the front end.
     """
-    output = parse_uw_alerts.scrape_uw_alerts()
-    # pylint: disable=no-else-return
-    if output is not None:
-        dirname = os.path.dirname(__file__)
-        filename = os.path.join(dirname, "../data/uw_alerts_clean.csv")
-        alert_df = pd.read_csv(filename, converters={"geometry": ast.literal_eval})
-        urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=24 * 7)
-        alert_map, marker_dict = get_folium_map(urgent_alerts_df)
-        updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
-        marker_json = json.dumps(updated_marker_dict)
-        return render_template(
-            "/home.html", map_html=updated_map, alert_dict=marker_json
-        )
-    else:
-        return "", 300
+    result = subprocess.run(
+        ["python", "-m", "scraper.scraper_agent"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        return f"Scraper failed: {result.stderr}", 500
+
+    alert_df = db.query_incidents_as_dataframe(hours=24 * 7)
+    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
+    alert_map, marker_dict = get_folium_map(urgent_alerts_df)
+    updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
+    marker_json = json.dumps(updated_marker_dict)
+    return render_template("home.html", map_html=updated_map, alert_dict=marker_json)
 
 
 if __name__ == "__main__":
