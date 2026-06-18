@@ -25,7 +25,6 @@ from .visualization_manager.visualization_manager import (
     get_urgent_incidents,
     attach_marker_ids,
 )
-from .parse_uw_alerts import parse_uw_alerts
 from . import db
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -135,6 +134,8 @@ def update_map():
     HTTP response containing demo page html content that is
     sent to front end in flask
     """
+    from .parse_uw_alerts import parse_uw_alerts  # lazy import — requires transformers
+
     # Parsing
     load_dotenv("../env")
     openai.api_key = os.getenv("OPENAI_API_KEY")

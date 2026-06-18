@@ -14,6 +14,7 @@ dependencies = [
     "folium==0.14.0",
     "shapely==2.0.1",
     "flask==2.2.2",
+    "werkzeug>=2.2,<3.0",
     "numpy==1.24.2",
     "fiona>=1.8,<1.10",
     "geopandas==0.12.2",
@@ -22,6 +23,7 @@ dependencies = [
     "beautifulsoup4",
     "python-dotenv==0.21.0",
     "googlemaps==4.10.0",
+    "openai>=1.0",
     "psycopg2-binary>=2.9",
     "pandas>=1.5",
 ]
