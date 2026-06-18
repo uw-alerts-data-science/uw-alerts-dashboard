@@ -9,7 +9,6 @@ It handles requests from the frontend to update the map with new information.
 import io
 import os
 import json
-import ast
 import pandas as pd
 import openai
 import googlemaps
@@ -24,6 +23,7 @@ from .visualization_manager.visualization_manager import (
     attach_marker_ids,
 )
 from .parse_uw_alerts import parse_uw_alerts
+from . import db
 
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
 app.default_charset = "utf-8"
@@ -41,11 +41,8 @@ def render_home_page():
     HTTP response containing html content that is
     sent to front end in flask
     """
-    # sample alerts
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, "../data/uw_alerts_clean.csv")
-    alert_df = pd.read_csv(filename, converters={"geometry": ast.literal_eval})
-    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=24 * 7)
+    alert_df = db.query_incidents_as_dataframe(hours=24 * 7)
+    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
     alert_map, marker_dict = get_folium_map(urgent_alerts_df)
     updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
     marker_json = json.dumps(updated_marker_dict)
@@ -79,11 +76,8 @@ def render_demo_page():
     HTTP response containing demo page html content that is
     sent to front end in flask
     """
-    # sample alerts
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, "../data/uw_alerts_clean.csv")
-    alert_df = pd.read_csv(filename, converters={"geometry": ast.literal_eval})
-    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=24)
+    alert_df = db.query_incidents_as_dataframe(hours=24)
+    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
     alert_map, marker_dict = get_folium_map(urgent_alerts_df)
     updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
     marker_json = json.dumps(updated_marker_dict)
@@ -102,10 +96,8 @@ def render_past_page():
     HTTP response containing past page html content that is
     sent to front end in flask
     """
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, "../data/uw_alerts_clean.csv")
-    alert_df = pd.read_csv(filename, converters={"geometry": ast.literal_eval})
-    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=500000)
+    alert_df = db.query_incidents_as_dataframe()
+    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
     alert_map, marker_dict = get_folium_map(urgent_alerts_df)
     updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
     marker_json = json.dumps(updated_marker_dict)
