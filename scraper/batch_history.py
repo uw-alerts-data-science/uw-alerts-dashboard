@@ -80,7 +80,12 @@ BATCH_TOOLS = [
                 "raw_scraped_text": {"type": "string"},
                 "source_url": {"type": "string"},
             },
-            "required": ["is_new_incident", "alert_type", "full_text", "raw_scraped_text"],
+            "required": [
+                "is_new_incident",
+                "alert_type",
+                "full_text",
+                "raw_scraped_text",
+            ],
         },
     },
 ]
@@ -154,8 +159,12 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
                 except anthropic.APIError as e:
                     if attempt == 2:
                         logger.error("claude_api_failed", extra={"error": str(e)})
-                        return {"status": "error", "error": str(e),
-                                "alerts_inserted": 0, "alerts_duplicate": 0}
+                        return {
+                            "status": "error",
+                            "error": str(e),
+                            "alerts_inserted": 0,
+                            "alerts_duplicate": 0,
+                        }
                     wait = 2 ** (attempt + 1)
                     time.sleep(wait)
 
@@ -166,12 +175,16 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
             for block in response.content:
                 if block.type == "tool_use":
                     logger.info("tool_call", extra={"tool": block.name})
-                    result = _dispatch(block.name, block.input, db_conn, config, dry_run)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(result),
-                    })
+                    result = _dispatch(
+                        block.name, block.input, db_conn, config, dry_run
+                    )
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(result),
+                        }
+                    )
                     if block.name == "upsert_alert":
                         upsert_results.append(result)
 
@@ -183,7 +196,8 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
                 return {
                     "status": "error",
                     "error": "tool_use stop_reason with no tool_use blocks",
-                    "alerts_inserted": 0, "alerts_duplicate": 0,
+                    "alerts_inserted": 0,
+                    "alerts_duplicate": 0,
                 }
 
             messages.append({"role": "assistant", "content": response.content})
@@ -194,8 +208,12 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
                 "agent_ended_without_upsert",
                 extra={"url": article.get("article_url")},
             )
-            return {"status": "error", "error": "agent ended without calling upsert_alert",
-                    "alerts_inserted": 0, "alerts_duplicate": 0}
+            return {
+                "status": "error",
+                "error": "agent ended without calling upsert_alert",
+                "alerts_inserted": 0,
+                "alerts_duplicate": 0,
+            }
 
         inserted = sum(1 for r in upsert_results if r.get("status") == "inserted")
         duplicate = sum(1 for r in upsert_results if r.get("status") == "duplicate")
@@ -208,17 +226,28 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
         else:
             status = "duplicate"
 
-        logger.info("article_complete", extra={
-            "url": article.get("article_url"),
+        logger.info(
+            "article_complete",
+            extra={
+                "url": article.get("article_url"),
+                "alerts_inserted": inserted,
+                "alerts_duplicate": duplicate,
+            },
+        )
+        return {
+            "status": status,
             "alerts_inserted": inserted,
             "alerts_duplicate": duplicate,
-        })
-        return {"status": status, "alerts_inserted": inserted, "alerts_duplicate": duplicate}
+        }
 
     except Exception as e:
         logger.error("batch_agent_error", extra={"error": str(e)})
-        return {"status": "error", "error": str(e),
-                "alerts_inserted": 0, "alerts_duplicate": 0}
+        return {
+            "status": "error",
+            "error": str(e),
+            "alerts_inserted": 0,
+            "alerts_duplicate": 0,
+        }
 
 
 def _try_scrape_article_urls(page_num: int) -> list:

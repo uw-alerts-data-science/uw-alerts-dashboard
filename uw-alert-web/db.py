@@ -66,22 +66,43 @@ def query_incidents_as_dataframe(hours: int | None = None) -> pd.DataFrame:
             conn.close()
 
     if not rows:
-        return pd.DataFrame(columns=[
-            "Incident ID", "Alert ID", "Incident Category", "Incident Alert",
-            "Nearest Address to Incident", "Date", "Report Time", "geometry",
-        ])
+        return pd.DataFrame(
+            columns=[
+                "Incident ID",
+                "Alert ID",
+                "Incident Category",
+                "Incident Alert",
+                "Nearest Address to Incident",
+                "Date",
+                "Report Time",
+                "geometry",
+            ]
+        )
 
     records = []
-    for incident_id, alert_id, category, alert_text, nearest_address, reported_at, lat, lng in rows:
-        records.append({
-            "Incident ID": incident_id,
-            "Alert ID": alert_id,
-            "Incident Category": category,
-            "Incident Alert": alert_text,
-            "Nearest Address to Incident": nearest_address,
-            "Date": reported_at.strftime("%Y-%m-%d") if reported_at else None,
-            "Report Time": reported_at.strftime("%H:%M:%S") if reported_at else None,
-            "geometry": {"location": {"lat": float(lat), "lng": float(lng)}},
-        })
+    for (
+        incident_id,
+        alert_id,
+        category,
+        alert_text,
+        nearest_address,
+        reported_at,
+        lat,
+        lng,
+    ) in rows:
+        records.append(
+            {
+                "Incident ID": incident_id,
+                "Alert ID": alert_id,
+                "Incident Category": category,
+                "Incident Alert": alert_text,
+                "Nearest Address to Incident": nearest_address,
+                "Date": reported_at.strftime("%Y-%m-%d") if reported_at else None,
+                "Report Time": reported_at.strftime("%H:%M:%S")
+                if reported_at
+                else None,
+                "geometry": {"location": {"lat": float(lat), "lng": float(lng)}},
+            }
+        )
 
     return pd.DataFrame(records)

@@ -11,7 +11,6 @@ from db import get_connection, query_incidents_as_dataframe
 
 
 class TestQueryIncidentsAsDataframe(unittest.TestCase):
-
     def _make_conn(self, rows):
         """Return a mock psycopg2 connection whose cursor fetchall returns rows."""
         cur = MagicMock()
@@ -25,16 +24,33 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
     @patch("db.get_connection")
     def test_returns_dataframe_with_correct_columns(self, mock_get_conn):
         ts = datetime(2024, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
-        conn, _ = self._make_conn([
-            (1, 10, "Robbery", "Pepper spray robbery", "12th Ave NE", ts, 47.656, -122.315),
-        ])
+        conn, _ = self._make_conn(
+            [
+                (
+                    1,
+                    10,
+                    "Robbery",
+                    "Pepper spray robbery",
+                    "12th Ave NE",
+                    ts,
+                    47.656,
+                    -122.315,
+                ),
+            ]
+        )
         mock_get_conn.return_value = conn
 
         df = query_incidents_as_dataframe()
 
         expected_cols = {
-            "Incident ID", "Alert ID", "Incident Category", "Incident Alert",
-            "Nearest Address to Incident", "Date", "Report Time", "geometry",
+            "Incident ID",
+            "Alert ID",
+            "Incident Category",
+            "Incident Alert",
+            "Nearest Address to Incident",
+            "Date",
+            "Report Time",
+            "geometry",
         }
         self.assertEqual(set(df.columns), expected_cols)
         self.assertEqual(len(df), 1)  # confirm row was processed, not just empty schema
@@ -42,9 +58,20 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
     @patch("db.get_connection")
     def test_maps_row_values_correctly(self, mock_get_conn):
         ts = datetime(2024, 3, 15, 10, 30, 0, tzinfo=timezone.utc)
-        conn, _ = self._make_conn([
-            (1, 10, "Robbery", "A robbery occurred", "12th Ave NE", ts, 47.656, -122.315),
-        ])
+        conn, _ = self._make_conn(
+            [
+                (
+                    1,
+                    10,
+                    "Robbery",
+                    "A robbery occurred",
+                    "12th Ave NE",
+                    ts,
+                    47.656,
+                    -122.315,
+                ),
+            ]
+        )
         mock_get_conn.return_value = conn
 
         df = query_incidents_as_dataframe()
@@ -57,7 +84,9 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
         self.assertEqual(row["Nearest Address to Incident"], "12th Ave NE")
         self.assertEqual(row["Date"], "2024-03-15")
         self.assertEqual(row["Report Time"], "10:30:00")
-        self.assertEqual(row["geometry"], {"location": {"lat": 47.656, "lng": -122.315}})
+        self.assertEqual(
+            row["geometry"], {"location": {"lat": 47.656, "lng": -122.315}}
+        )
 
     @patch("db.get_connection")
     def test_empty_result_returns_empty_dataframe_with_columns(self, mock_get_conn):
@@ -84,9 +113,20 @@ class TestQueryIncidentsAsDataframe(unittest.TestCase):
 
     @patch("db.get_connection")
     def test_null_reported_at_produces_none_date(self, mock_get_conn):
-        conn, _ = self._make_conn([
-            (2, 20, "Theft", "Theft occurred", "Red Square", None, 47.655, -122.310),
-        ])
+        conn, _ = self._make_conn(
+            [
+                (
+                    2,
+                    20,
+                    "Theft",
+                    "Theft occurred",
+                    "Red Square",
+                    None,
+                    47.655,
+                    -122.310,
+                ),
+            ]
+        )
         mock_get_conn.return_value = conn
 
         df = query_incidents_as_dataframe()

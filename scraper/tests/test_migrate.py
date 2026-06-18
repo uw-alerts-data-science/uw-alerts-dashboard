@@ -6,10 +6,12 @@ import psycopg2
 
 @pytest.fixture(scope="module")
 def db():
-    url = os.environ.get("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("TEST_DATABASE_URL not set; skipping Postgres integration tests")
-    conn = psycopg2.connect(url)
+    url = os.environ.get("TEST_DATABASE_URL", "postgres://localhost/uw_alerts_test")
+    sep = "&" if "?" in url else "?"
+    try:
+        conn = psycopg2.connect(url + sep + "connect_timeout=3")
+    except psycopg2.OperationalError as e:
+        pytest.skip(f"test DB unavailable: {e}")
     with conn.cursor() as cur:
         cur.execute("DELETE FROM alerts; DELETE FROM incidents;")
     conn.commit()

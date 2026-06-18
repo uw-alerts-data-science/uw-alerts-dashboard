@@ -40,16 +40,19 @@ def _end_turn_response():
     "scraper.batch_history.upsert_alert",
     return_value={"status": "inserted", "incident_id": 1, "alert_id": 1},
 )
-@patch("scraper.batch_history.anthropic.Anthropic")
-def test_run_batch_agent_upsert_returns_inserted(mock_cls, mock_upsert):
-    mock_cls.return_value.messages.create.return_value = _tool_response(
-        "upsert_alert",
-        {
-            "alert_type": "original",
-            "full_text": "Theft near HUB.",
-            "raw_scraped_text": "Theft near HUB.",
-        },
-    )
+@patch("scraper.batch_history.get_anthropic_client")
+def test_run_batch_agent_upsert_returns_inserted(mock_get_client, mock_upsert):
+    mock_get_client.return_value.messages.create.side_effect = [
+        _tool_response(
+            "upsert_alert",
+            {
+                "alert_type": "original",
+                "full_text": "Theft near HUB.",
+                "raw_scraped_text": "Theft near HUB.",
+            },
+        ),
+        _end_turn_response(),
+    ]
     from scraper.batch_history import run_batch_agent
 
     conn = MagicMock()
@@ -58,9 +61,9 @@ def test_run_batch_agent_upsert_returns_inserted(mock_cls, mock_upsert):
     assert mock_upsert.called
 
 
-@patch("scraper.batch_history.anthropic.Anthropic")
-def test_run_batch_agent_end_turn_returns_error(mock_cls):
-    mock_cls.return_value.messages.create.return_value = _end_turn_response()
+@patch("scraper.batch_history.get_anthropic_client")
+def test_run_batch_agent_end_turn_returns_error(mock_get_client):
+    mock_get_client.return_value.messages.create.return_value = _end_turn_response()
     from scraper.batch_history import run_batch_agent
 
     conn = MagicMock()
@@ -68,11 +71,11 @@ def test_run_batch_agent_end_turn_returns_error(mock_cls):
     assert result.get("status") == "error"
 
 
-@patch("scraper.batch_history.anthropic.Anthropic")
-def test_run_batch_agent_returns_error_on_api_failure(mock_cls):
+@patch("scraper.batch_history.get_anthropic_client")
+def test_run_batch_agent_returns_error_on_api_failure(mock_get_client):
     import anthropic as anthropic_mod
 
-    mock_cls.return_value.messages.create.side_effect = anthropic_mod.APIError(
+    mock_get_client.return_value.messages.create.side_effect = anthropic_mod.APIError(
         message="rate limit", request=MagicMock(), body=None
     )
     from scraper.batch_history import run_batch_agent
@@ -82,17 +85,20 @@ def test_run_batch_agent_returns_error_on_api_failure(mock_cls):
     assert result["status"] == "error"
 
 
-@patch("scraper.batch_history.anthropic.Anthropic")
-def test_run_batch_agent_dry_run_skips_write(mock_cls, monkeypatch):
+@patch("scraper.batch_history.get_anthropic_client")
+def test_run_batch_agent_dry_run_skips_write(mock_get_client, monkeypatch):
     monkeypatch.setenv("DRY_RUN", "true")
-    mock_cls.return_value.messages.create.return_value = _tool_response(
-        "upsert_alert",
-        {
-            "alert_type": "original",
-            "full_text": "test alert",
-            "raw_scraped_text": "test alert",
-        },
-    )
+    mock_get_client.return_value.messages.create.side_effect = [
+        _tool_response(
+            "upsert_alert",
+            {
+                "alert_type": "original",
+                "full_text": "test alert",
+                "raw_scraped_text": "test alert",
+            },
+        ),
+        _end_turn_response(),
+    ]
     from scraper.batch_history import run_batch_agent
 
     conn = MagicMock()
@@ -116,7 +122,12 @@ def test_batch_tools_upsert_alert_required_fields():
 
     upsert = next(t for t in BATCH_TOOLS if t["name"] == "upsert_alert")
     required = set(upsert["input_schema"]["required"])
-    assert required == {"alert_type", "full_text", "raw_scraped_text"}
+    assert required == {
+        "is_new_incident",
+        "alert_type",
+        "full_text",
+        "raw_scraped_text",
+    }
 
 
 # ── _discover_article_urls ───────────────────────────────────────────────────
