@@ -151,9 +151,11 @@ def run_agent(config: dict) -> int:
                     time.sleep(wait)
 
             if response.stop_reason == "end_turn":
-                logger.info("agent_complete", extra={"stop_reason": "end_turn"})
-                break
-
+                logger.error(
+                    "agent_ended_without_terminal_tool",
+                    extra={"stop_reason": "end_turn"},
+                )
+                return 1
             tool_results, called_terminal = [], False
             for block in response.content:
                 if block.type == "tool_use":

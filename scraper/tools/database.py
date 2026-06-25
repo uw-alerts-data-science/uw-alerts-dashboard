@@ -23,7 +23,7 @@ def query_recent_incidents(conn, limit: int = 10) -> list:
                        (SELECT full_text FROM alerts WHERE incident_id = i.id
                         ORDER BY created_at DESC LIMIT 1) AS latest_text
                 FROM incidents i
-                ORDER BY i.first_reported_at DESC
+                ORDER BY COALESCE(i.first_reported_at, i.created_at) DESC
                 LIMIT %s
             """,
                 (limit,),

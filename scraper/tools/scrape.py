@@ -26,8 +26,7 @@ def scrape_uw_blog() -> dict:
     if not article:
         raise ScrapingError("Could not find any article element on page")
 
-    time_el = article.find("time", class_="entry-date")
-    if not time_el:
+    if not article.find("time", class_="entry-date"):
         raise ScrapingError("Could not find a date element in article")
 
     raw_text = article.get_text(separator="\n", strip=True)
