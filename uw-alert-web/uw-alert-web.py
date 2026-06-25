@@ -6,10 +6,12 @@ for communication between the front end (html files) to the backend (.py files).
 It handles requests from the frontend to update the map with new information.
 """
 
+import ast
 import io
 import os
 import json
-import ast
+import subprocess
+import sys
 import pandas as pd
 import openai
 import googlemaps
@@ -23,7 +25,9 @@ from .visualization_manager.visualization_manager import (
     get_urgent_incidents,
     attach_marker_ids,
 )
-from .parse_uw_alerts import parse_uw_alerts
+from . import db
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 app = Flask(__name__, template_folder="../templates", static_folder="../static")
 app.default_charset = "utf-8"
@@ -33,7 +37,7 @@ app.default_charset = "utf-8"
 def render_home_page():
     """
     Renders the home page using home.html using
-    the data/uw_alerts_clean.csv file. Displays
+    the database. Displays
     current urgent alerts within the specified time_frame
 
     Returns
@@ -41,11 +45,8 @@ def render_home_page():
     HTTP response containing html content that is
     sent to front end in flask
     """
-    # sample alerts
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, "../data/uw_alerts_clean.csv")
-    alert_df = pd.read_csv(filename, converters={"geometry": ast.literal_eval})
-    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=24 * 7)
+    alert_df = db.query_incidents_as_dataframe(hours=24 * 7)
+    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
     alert_map, marker_dict = get_folium_map(urgent_alerts_df)
     updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
     marker_json = json.dumps(updated_marker_dict)
@@ -69,7 +70,7 @@ def redirect_to_home():
 def render_demo_page():
     """
     Renders the demo page using demo.html using
-    the data/uw_alerts_clean.csv file. Allows
+    the database. Allows
     for user input to add additional alerts Displays
     current urgent alerts within the specified time_frame
     Purely for demo purposes.
@@ -79,11 +80,8 @@ def render_demo_page():
     HTTP response containing demo page html content that is
     sent to front end in flask
     """
-    # sample alerts
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, "../data/uw_alerts_clean.csv")
-    alert_df = pd.read_csv(filename, converters={"geometry": ast.literal_eval})
-    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=24)
+    alert_df = db.query_incidents_as_dataframe(hours=24)
+    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
     alert_map, marker_dict = get_folium_map(urgent_alerts_df)
     updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
     marker_json = json.dumps(updated_marker_dict)
@@ -94,7 +92,7 @@ def render_demo_page():
 def render_past_page():
     """
     Renders the past page using past.html using
-    the data/uw_alerts_clean.csv file. Displays
+    the database. Displays
     all past uw alerts.
 
     Returns
@@ -102,10 +100,8 @@ def render_past_page():
     HTTP response containing past page html content that is
     sent to front end in flask
     """
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, "../data/uw_alerts_clean.csv")
-    alert_df = pd.read_csv(filename, converters={"geometry": ast.literal_eval})
-    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=500000)
+    alert_df = db.query_incidents_as_dataframe()
+    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
     alert_map, marker_dict = get_folium_map(urgent_alerts_df)
     updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
     marker_json = json.dumps(updated_marker_dict)
@@ -138,6 +134,8 @@ def update_map():
     HTTP response containing demo page html content that is
     sent to front end in flask
     """
+    from .parse_uw_alerts import parse_uw_alerts  # lazy import — requires transformers
+
     # Parsing
     load_dotenv("../env")
     openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -170,30 +168,30 @@ def update_map():
 @app.route("/fully_update", methods=["GET"])
 def fully_update():
     """
-    Scrape the UW Blog website and creates a folium map with
-    new data if it exists.
+    Runs the scraper agent to fetch new alerts, then renders
+    the home page with the latest data from the database.
 
     Returns
     -------
-    Fully rendered HTML page that is sent to the
-    front end to display the updated map.
-
+    Fully rendered HTML page sent to the front end.
     """
-    output = parse_uw_alerts.scrape_uw_alerts()
-    # pylint: disable=no-else-return
-    if output is not None:
-        dirname = os.path.dirname(__file__)
-        filename = os.path.join(dirname, "../data/uw_alerts_clean.csv")
-        alert_df = pd.read_csv(filename, converters={"geometry": ast.literal_eval})
-        urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=24 * 7)
-        alert_map, marker_dict = get_folium_map(urgent_alerts_df)
-        updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
-        marker_json = json.dumps(updated_marker_dict)
-        return render_template(
-            "/home.html", map_html=updated_map, alert_dict=marker_json
-        )
-    else:
-        return "", 300
+    result = subprocess.run(
+        [sys.executable, "-m", "scraper.scraper_agent"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        cwd=_REPO_ROOT,
+    )
+    if result.returncode != 0:
+        app.logger.error("scraper_agent failed: %s", result.stderr)
+        return "Scraper failed. Check server logs for details.", 500
+
+    alert_df = db.query_incidents_as_dataframe(hours=24 * 7)
+    urgent_alerts_df = get_urgent_incidents(alert_df, time_frame=10_000_000)
+    alert_map, marker_dict = get_folium_map(urgent_alerts_df)
+    updated_map, updated_marker_dict = attach_marker_ids(alert_map, marker_dict)
+    marker_json = json.dumps(updated_marker_dict)
+    return render_template("home.html", map_html=updated_map, alert_dict=marker_json)
 
 
 if __name__ == "__main__":

@@ -14,15 +14,19 @@ dependencies = [
     "folium==0.14.0",
     "shapely==2.0.1",
     "flask==2.2.2",
+    "werkzeug>=2.2,<3.0",
     "numpy==1.24.2",
     "fiona>=1.8,<1.10",
     "geopandas==0.12.2",
-    "openai==0.26.5",
-    "transformers==4.26.1",
-    "requests==2.28.1",
+    "anthropic>=0.36.0",
+    "requests>=2.28.1",
     "beautifulsoup4",
     "python-dotenv==0.21.0",
     "googlemaps==4.10.0",
+    "openai>=1.0",
+    "psycopg2-binary>=2.9",
+    "pandas>=1.5",
+    "transformers>=5.12.1",
 ]
 
 [dependency-groups]
@@ -30,6 +34,10 @@ dev = [
     "coverage",
     "ruff>=0.5",
     "poethepoet>=0.27",
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+    "responses>=0.25",
+    "python-json-logger>=2.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -57,6 +65,10 @@ sequence = [
     { cmd = "coverage report", cwd = "uw-alert-web" },
 ]
 
+[tool.poe.tasks.test-scraper]
+help = "Run scraper unit tests"
+cmd = "pytest scraper/tests/ -v"
+
 # ---------------------------------------------------------------------------
 # Ruff config (replaces pylint)
 # ---------------------------------------------------------------------------
@@ -72,3 +84,6 @@ ignore = [
     "W291",       # trailing whitespace — present in multi-line test strings, unsafe to auto-fix
     "W293",       # whitespace on blank line — same reason as W291
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
