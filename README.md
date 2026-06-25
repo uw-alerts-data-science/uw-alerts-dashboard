@@ -2,7 +2,7 @@
 
 [![Coverage Status](https://coveralls.io/repos/github/evanyfyip/uw-alert-web/badge.svg?branch=main)](https://coveralls.io/github/evanyfyip/uw-alert-web?branch=main)
 
-A public civic tool that surfaces University of Washington campus safety alerts on an interactive map, with historical analytics and external data overlays. See [`docs/project-plan.md`](docs/project-plan.md) for the full roadmap.
+A public civic tool that surfaces University of Washington campus safety alerts on an interactive map, with historical analytics and external data overlays.
 
 ---
 
@@ -43,8 +43,6 @@ Live Alert View (Next.js + MapLibre GL)        Analytics Dashboard (Next.js + Re
 ---
 
 ## Roadmap
-
-Full details in [`docs/project-plan.md`](docs/project-plan.md).
 
 ### Phase 1 — Thin Vertical Slice (target: end of July 2026)
 - [ ] FastAPI rewrite — replace Flask with FastAPI, expose `/alerts/live` endpoint
@@ -89,7 +87,6 @@ data/
   SeattleGISData/                   # U-District street network GeoJSON
 
 docs/                               # Project planning and specs
-  project-plan.md                   # Full roadmap and team structure
 
 .github/workflows/
   build_test.yml                    # CI: Flask tests + scraper tests (with Postgres)
