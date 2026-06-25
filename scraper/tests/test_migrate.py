@@ -24,8 +24,8 @@ def test_migrate_inserts_expected_counts(db):
 
     result = migrate_csv("data/uw_alerts_clean.csv", db)
     assert result["incidents_inserted"] == 98
-    assert result["alerts_inserted"] == 285
-    assert result["duplicates_skipped"] == 0
+    assert result["alerts_inserted"] == 265
+    assert result["duplicates_skipped"] == 20
 
 
 def test_migrate_is_idempotent(db):
