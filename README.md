@@ -103,8 +103,11 @@ docs/                               # Project planning and specs
 - Docker (for local PostgreSQL)
 - API keys: `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`
 
+> **Windows users:** The `make` commands below require WSL or GNU Make. Use the `uv run` equivalents listed in each section instead — they work natively on Windows.
+
 ### Scraper
 
+**Mac/Linux:**
 ```bash
 make db-up          # start Postgres in Docker
 make schema         # create tables and indexes
@@ -115,9 +118,42 @@ make audit          # data quality report
 make db-shell       # inspect the database
 ```
 
+**Windows (uv run equivalents):**
+```powershell
+# Start Postgres in Docker
+docker run -d --name uw-alerts-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=uw_alerts_dev -p 5432:5432 postgres:15
+
+# Apply schema
+docker exec -i uw-alerts-pg psql -U postgres uw_alerts_dev < scraper/db/schema.sql
+
+# Run agent (dry run — no DB writes)
+$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/uw_alerts_dev"; $env:DRY_RUN="true"; uv run python -m scraper.scraper_agent
+
+# Run agent for real
+$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/uw_alerts_dev"; uv run python -m scraper.scraper_agent
+
+# Import full historical archive
+$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/uw_alerts_dev"; uv run python -m scraper.batch_history
+
+# Data quality report
+$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/uw_alerts_dev"; uv run python -m scraper.audit
+
+# Inspect the database
+docker exec -it uw-alerts-pg psql -U postgres uw_alerts_dev
+```
+
 ### Flask app (v1 — being retired)
 
+**Mac/Linux:**
 ```bash
+uv sync
+make serve        # foreground — http://127.0.0.1:5000
+make serve-up     # background
+make serve-down   # stop background server
+```
+
+**Windows:**
+```powershell
 uv sync
 cd uw-alert-web
 uv run flask --app=uw-alert-web run
@@ -126,6 +162,8 @@ uv run flask --app=uw-alert-web run
 
 ### Environment Variables
 
+Copy `.env.example` (or create `.env`) in the repo root:
+
 | Variable | Description |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key |
@@ -133,13 +171,23 @@ uv run flask --app=uw-alert-web run
 | `DATABASE_URL` | `postgres://user:pass@host:5432/dbname` |
 | `DRY_RUN` | Set to `true` to skip DB writes |
 
+`python-dotenv` loads `.env` automatically when running via `uv run`. On Windows, you can also set variables in PowerShell with `$env:VAR="value"` before each command (as shown above), or use a tool like [direnv](https://direnv.net/).
+
 ### Testing
 
+**Mac/Linux:**
 ```bash
 uv run poe test           # Flask app tests
 make test-scraper         # Scraper unit tests (no DB required)
 make test-scraper-full    # All scraper tests (requires make schema)
 uv run poe lint           # Lint
+```
+
+**Windows:**
+```powershell
+uv run poe test                                                                    # Flask app tests
+uv run pytest scraper/tests/ --ignore=scraper/tests/test_schema.py --ignore=scraper/tests/test_migrate.py -v  # Scraper unit tests
+uv run poe lint                                                                    # Lint
 ```
 
 ---
