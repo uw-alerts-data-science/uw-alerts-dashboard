@@ -103,6 +103,8 @@ docs/                               # Project planning and specs
 - Docker (for local PostgreSQL)
 - API keys: `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`
 
+> New to GitHub or SSH? See [docs/github-setup.md](docs/github-setup.md) for a step-by-step guide covering GitHub CLI, SSH key generation, and cloning the repo.
+
 > **Windows users:** The `make` commands below require WSL or GNU Make. Use the `uv run` equivalents listed in each section instead — they work natively on Windows.
 
 ### Scraper
