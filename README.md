@@ -36,7 +36,7 @@ UW Alerts Blog (emergency.uw.edu)
 - Python 3.10–3.11
 - [uv](https://docs.astral.sh/uv/) package manager
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for local PostgreSQL)
-- API keys: `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_API_KEY`
+- API keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_API_KEY`
 
 ### Quickstart
 
@@ -65,6 +65,7 @@ uv run poe dev
 | `uv run poe db-dump` | Export DB to `data/snapshot/` CSVs |
 | `uv run poe db-seed` | Seed DB from `data/snapshot/` CSVs |
 | `uv run poe test` | Flask app unit tests |
+| `uv run poe test-scraper` | Scraper unit tests (no DB required) |
 | `uv run poe lint` | Lint check |
 
 ## Scraper Service
