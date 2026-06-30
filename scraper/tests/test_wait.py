@@ -1,6 +1,6 @@
 import psycopg2
 import pytest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 
 def test_wait_succeeds_immediately():
