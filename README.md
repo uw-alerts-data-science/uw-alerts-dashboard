@@ -59,14 +59,15 @@ brew install make
 # 1. Clone and install
 git clone https://github.com/uw-alerts-data-science/uw-alerts-dashboard.git
 cd uw-alerts-dashboard
-uv sync # Sync python dependencies
+uv sync # Sync python dependencies (this will also install poethepoet)
 
 # 2. Configure environment
+# IMPORTANT: You must get actual API keys and replace these templates
 cp .env.example .env   # fill in OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_MAPS_API_KEY, MAPBOX_API_KEY
 
 # 3. Start everything
 uv run poe dev
-# → Boots postgres, applies schema, seeds DB, starts Flask at http://127.0.0.1:5000
+# → Boots postgres, applies schema, seeds DB, starts Flask (the webapp) at http://127.0.0.1:5000
 ```
 
 ### Poe tasks
@@ -89,7 +90,7 @@ of uv (package manager) and poe to setup the backend python services (currently 
 
 The `scraper/` directory contains a Claude-powered agent that polls `emergency.uw.edu` and maintains a normalized PostgreSQL database. It is designed to run as a Kubernetes CronJob every 15 minutes.
 
-### Makefile (requires Docker)
+### Makefile commands
 Once we migrate to using a different frontend stack, it may make sense to utilize `make` to orchestrate both
 the frontend and backend with a single interface. Recommended setup (Windows [chocolatey & make setup](https://medium.com/@AliMasaoodi/installing-make-on-windows-10-using-chocolatey-a-step-by-step-guide-5e178c449394))
 
@@ -101,22 +102,13 @@ make run        # run agent for real (needs ANTHROPIC_API_KEY etc.)
 make db-shell   # inspect the database
 ```
 
-### Environment Variables
-
-| Variable | Description |
-|---|---|
-| `ANTHROPIC_API_KEY` | Claude API key |
-| `GOOGLE_MAPS_API_KEY` | Geocoding |
-| `DATABASE_URL` | `postgres://user:pass@host:5432/dbname` |
-| `DRY_RUN` | Set to `true` to log decisions without writing |
-
 ## Testing
 
 ```bash
-uv run poe test                 # Flask app tests
-uv run poe test-scraper         # Scraper unit tests (no DB required)
-uv run poe test-scraper-full    # All scraper tests including DB (requires poe setup first)
-uv run poe lint                 # Lint check
+uv run poe test          # Flask app tests (42 tests)
+make test-scraper        # Scraper unit tests (20 tests, no DB needed)
+make test-scraper-full   # All scraper tests including DB (requires make schema)
+uv run poe lint          # Lint check
 ```
 
 ## Project Structure
