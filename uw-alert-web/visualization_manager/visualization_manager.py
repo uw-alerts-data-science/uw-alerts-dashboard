@@ -20,6 +20,7 @@ import os
 import re
 import pyproj
 import folium
+import math
 from folium.plugins import HeatMap
 import pandas as pd
 import geopandas as gpd
@@ -297,7 +298,11 @@ def get_folium_map(alert_df: pd.DataFrame):
     # Plotting each alert on the map
     for i, coord in enumerate(alert_coords):
         # Display streets that are close to the alert
-        filtered_streets = filter_geodf(gdf, coord[0], coord[1])
+        #filtered_streets = filter_geodf(gdf, coord[0], coord[1])
+        try:
+            filtered_streets = filter_geodf(gdf, coord[0], coord[1])
+        except ValueError:
+            continue
         folium.Choropleth(
             geo_data=filtered_streets, line_weight=3, line_color="red", line_opacity=0.5
         ).add_to(alert_map)
@@ -337,7 +342,18 @@ def get_folium_map(alert_df: pd.DataFrame):
     marker_dict["map_id"] = alert_map.get_name()
 
     # Create a heatmap layer for each alert
-    HeatMap(alert_coords, radius=10, gradient={0: "lime", 0.5: "red"}).add_to(alert_map)
+
+    alert_coords = [
+        coord for coord in alert_coords
+        if coord
+        and len(coord) >= 2
+        and coord[0] is not None
+        and coord[1] is not None
+        and not math.isnan(float(coord[0]))
+        and not math.isnan(float(coord[1]))
+    ]
+    if alert_coords:
+        HeatMap(alert_coords, radius=10, gradient={0: "lime", 0.5: "red"}).add_to(alert_map)
     m_html = alert_map.get_root().render()
     return (m_html, marker_dict)
 
