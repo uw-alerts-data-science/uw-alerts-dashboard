@@ -29,13 +29,6 @@ UW Alerts Blog (emergency.uw.edu)
   └── visualization_manager/ → Folium map → browser
 ```
 
-## Prerequisites
-
-- Python 3.10–3.11
-- [uv](https://docs.astral.sh/uv/) package manager
-- Docker (for local PostgreSQL when running the scraper)
-- API keys: `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_API_KEY`
-
 ## Local Dev Setup
 
 ### Prerequisites
