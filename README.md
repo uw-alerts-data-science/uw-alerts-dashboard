@@ -40,26 +40,6 @@ Live Alert View (Next.js + MapLibre GL)        Analytics Dashboard (Next.js + Re
   15-min polling + last-updated timestamp        External data overlays (Census, Seattle Open Data)
 ```
 
----
-
-## Roadmap
-
-### Phase 1 — Thin Vertical Slice (target: end of July 2026)
-- [ ] FastAPI rewrite — replace Flask with FastAPI, expose `/alerts/live` endpoint
-- [ ] Next.js frontend — MapLibre GL map consuming FastAPI, live alert markers + tooltips
-- [ ] Deploy to DigitalOcean Kubernetes at `uwalerts.live`
-
-### Phase 2 — Analytics Dashboard (target: mid-August 2026)
-- [ ] Historical filtering by date range, category, location
-- [ ] Recharts dashboard: time-series, category breakdown, stat widgets
-- [ ] External dataset integrations (DS-specced — see `docs/specs/`)
-
-### Phase 3 — Stretch
-- [ ] dbt transformation layer
-- [ ] MCP server exposing incidents database as Claude tools
-- [ ] Natural language query interface
-
----
 
 ## Project Structure
 
