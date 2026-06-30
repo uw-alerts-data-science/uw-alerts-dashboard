@@ -77,8 +77,8 @@ help = "Export DB tables to data/snapshot/ CSV files"
 cmd = "python -c \"import psycopg2, os; from scraper.db.dump import dump_to_csv; conn = psycopg2.connect(os.environ['DATABASE_URL']); print(dump_to_csv(conn)); conn.close()\""
 
 [tool.poe.tasks.db-seed]
-help = "Seed DB from data/snapshot/ CSV files (skips duplicates)"
-cmd = "python -c \"import psycopg2, os; from scraper.db.migrate import seed_from_snapshot; conn = psycopg2.connect(os.environ['DATABASE_URL']); print(seed_from_snapshot('data/snapshot', conn)); conn.close()\""
+help = "Seed DB from data/snapshot/ CSV files (skips if already populated)"
+cmd = "python -c \"import psycopg2, os; from scraper.db.migrate import seed_if_empty; conn = psycopg2.connect(os.environ['DATABASE_URL']); print(seed_if_empty('data/snapshot', conn)); conn.close()\""
 
 [tool.poe.tasks.serve]
 help = "Start the Flask web app"

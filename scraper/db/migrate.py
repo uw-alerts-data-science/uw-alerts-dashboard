@@ -88,6 +88,17 @@ def migrate_csv(csv_path: str, conn) -> dict:
     }
 
 
+def seed_if_empty(snapshot_dir: str, conn) -> dict:
+    """Seed from snapshot only if the incidents table is empty. Safe to re-run."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM incidents")
+        count = cur.fetchone()[0]
+    if count > 0:
+        print(f"Database already contains {count} incident(s) — skipping seed.")
+        return {"incidents_inserted": 0, "alerts_inserted": 0, "duplicates_skipped": count}
+    return seed_from_snapshot(snapshot_dir, conn)
+
+
 def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
     """Seed the DB from CSV files produced by dump_to_csv.
 
