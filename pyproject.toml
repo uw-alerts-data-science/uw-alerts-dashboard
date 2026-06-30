@@ -69,8 +69,13 @@ sequence = [
 ]
 
 [tool.poe.tasks.test-scraper]
-help = "Run scraper unit tests"
+help = "Run scraper unit tests (no DB required)"
+cmd = "pytest scraper/tests/ --ignore=scraper/tests/test_schema.py --ignore=scraper/tests/test_migrate.py --ignore=scraper/tests/test_schema_apply.py -v"
+
+[tool.poe.tasks.test-scraper-full]
+help = "Run all scraper tests including DB tests (requires poe setup first)"
 cmd = "pytest scraper/tests/ -v"
+env = { TEST_DATABASE_URL = "postgres://postgres:postgres@localhost:5432/uw_alerts_test" }
 
 [tool.poe.tasks.db-dump]
 help = "Export DB tables to data/snapshot/ CSV files"
