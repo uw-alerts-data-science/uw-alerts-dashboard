@@ -33,6 +33,11 @@ def load_config() -> dict:
         if value:
             config[var] = value
 
+    # Load database url
+    value = os.environ.get("DATABASE_URL")
+    if value:
+        config["DATABASE_URL"] = value
+
     if missing:
         for var in missing:
             logger.error("missing_env_var", extra={"var": var})
