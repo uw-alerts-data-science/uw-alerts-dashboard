@@ -80,6 +80,31 @@ cmd = "python -c \"import psycopg2, os; from scraper.db.dump import dump_to_csv;
 help = "Seed DB from data/snapshot/ CSV files (skips duplicates)"
 cmd = "python -c \"import psycopg2, os; from scraper.db.migrate import seed_from_snapshot; conn = psycopg2.connect(os.environ['DATABASE_URL']); print(seed_from_snapshot('data/snapshot', conn)); conn.close()\""
 
+[tool.poe.tasks.serve]
+help = "Start the Flask web app"
+cmd = "uv run flask --app=uw-alert-web run"
+cwd = "uw-alert-web"
+
+[tool.poe.tasks.db-down]
+help = "Stop local Postgres container"
+cmd = "docker compose down"
+
+[tool.poe.tasks.setup]
+help = "Spin up postgres, apply schema, and seed from snapshot"
+sequence = [
+  { cmd = "docker compose up -d" },
+  { script = "scraper.db.wait:wait_for_postgres" },
+  { script = "scraper.db.schema:apply_schema" },
+  { ref = "db-seed" },
+]
+
+[tool.poe.tasks.dev]
+help = "Full local dev: postgres up, schema, seed, and Flask at http://127.0.0.1:5000"
+sequence = [
+  { ref = "setup" },
+  { ref = "serve" },
+]
+
 # ---------------------------------------------------------------------------
 # Ruff config (replaces pylint)
 # ---------------------------------------------------------------------------
