@@ -47,7 +47,7 @@ cd uw-alerts-dashboard
 uv sync
 
 # 2. Configure environment
-cp .env.example .env   # fill in ANTHROPIC_API_KEY, GOOGLE_MAPS_API_KEY, MAPBOX_API_KEY
+cp .env.example .env   # fill in OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_MAPS_API_KEY, MAPBOX_API_KEY
 
 # 3. Start everything
 uv run poe dev
