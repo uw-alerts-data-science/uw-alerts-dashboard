@@ -36,29 +36,43 @@ UW Alerts Blog (emergency.uw.edu)
 - Docker (for local PostgreSQL when running the scraper)
 - API keys: `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_API_KEY`
 
-## Quickstart — Flask App
+## Local Dev Setup
+
+### Prerequisites
+
+- Python 3.10–3.11
+- [uv](https://docs.astral.sh/uv/) package manager
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for local PostgreSQL)
+- API keys: `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_API_KEY`
+
+### Quickstart
 
 ```bash
-# Clone and install
+# 1. Clone and install
 git clone https://github.com/uw-alerts-data-science/uw-alerts-dashboard.git
 cd uw-alerts-dashboard
 uv sync
 
-# Create .env file
-cp .env.example .env   # then fill in your keys
+# 2. Configure environment
+cp .env.example .env   # fill in ANTHROPIC_API_KEY, GOOGLE_MAPS_API_KEY, MAPBOX_API_KEY
 
-# Run
-cd uw-alert-web
-uv run flask --app=uw-alert-web run
-# → http://127.0.0.1:5000
+# 3. Start everything
+uv run poe dev
+# → Boots postgres, applies schema, seeds DB, starts Flask at http://127.0.0.1:5000
 ```
 
-**.env file format:**
-```
-ANTHROPIC_API_KEY='...'
-GOOGLE_MAPS_API_KEY='...'
-MAPBOX_API_KEY='...'
-```
+### Poe tasks
+
+| Command | What it does |
+|---|---|
+| `uv run poe dev` | Full environment: postgres + seed + Flask (blocks) |
+| `uv run poe setup` | Postgres up + schema + seed (no Flask) |
+| `uv run poe serve` | Flask only (requires postgres already running) |
+| `uv run poe db-down` | Stop postgres container |
+| `uv run poe db-dump` | Export DB to `data/snapshot/` CSVs |
+| `uv run poe db-seed` | Seed DB from `data/snapshot/` CSVs |
+| `uv run poe test` | Flask app unit tests |
+| `uv run poe lint` | Lint check |
 
 ## Scraper Service
 
