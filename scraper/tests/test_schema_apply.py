@@ -18,6 +18,10 @@ def test_db():
             cur.execute("DROP TABLE IF EXISTS alerts CASCADE")
             cur.execute("DROP TABLE IF EXISTS incidents CASCADE")
     yield conn
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute("DROP TABLE IF EXISTS alerts CASCADE")
+            cur.execute("DROP TABLE IF EXISTS incidents CASCADE")
     conn.close()
 
 
