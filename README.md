@@ -40,6 +40,87 @@ Live Alert View (Next.js + MapLibre GL)        Analytics Dashboard (Next.js + Re
   15-min polling + last-updated timestamp        External data overlays (Census, Seattle Open Data)
 ```
 
+## Local Dev Setup
+
+### Prerequisites
+For this project the key installations are to have uv, Docker, Chocolatey/Homebrew, 
+- Package Managers: Windows - [Download Chocolatey](https://chocolatey.org/install), Mac - [Download Brew Package Manager](https://docs.brew.sh/Installation)
+- GNU make - Build automation tool
+- [uv](https://docs.astral.sh/uv/) package manager
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for local PostgreSQL)
+- API keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_API_KEY`
+
+### Quickstart
+
+```bash
+# Prerequisites
+# 1 Install your package manager `choco` for windows or `brew` for mac
+# See documentation above
+
+# 2. Install uv and make with package manager
+# Windows
+choco install uv
+choco install make
+
+# Mac
+brew install uv
+brew install make
+
+# Repository setup
+# 1. Clone and install
+git clone https://github.com/uw-alerts-data-science/uw-alerts-dashboard.git
+cd uw-alerts-dashboard
+uv sync # Sync python dependencies (this will also install poethepoet)
+
+# 2. Configure environment
+# IMPORTANT: You must get actual API keys and replace these templates
+cp .env.example .env   # fill in OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_MAPS_API_KEY, MAPBOX_API_KEY
+
+# 3. Start everything
+uv run poe dev
+# → Boots postgres, applies schema, seeds DB, starts Flask (the webapp) at http://127.0.0.1:5000
+```
+
+### Poe tasks
+Poethepoet is a task runner that provides a simple way to define project tasks. We will use a combination
+of uv (package manager) and poe to setup the backend python services (currently flask app, postgres database etc).
+
+| Command | What it does |
+|---|---|
+| `uv run poe dev` | Full environment: postgres + seed + Flask (blocks) |
+| `uv run poe setup` | Postgres up + schema + seed (no Flask) |
+| `uv run poe serve` | Flask only (requires postgres already running) |
+| `uv run poe db-down` | Stop postgres container |
+| `uv run poe db-dump` | Export DB to `data/snapshot/` CSVs |
+| `uv run poe db-seed` | Seed DB from `data/snapshot/` CSVs |
+| `uv run poe test` | Flask app unit tests |
+| `uv run poe test-scraper` | Scraper unit tests (no DB required) |
+| `uv run poe lint` | Lint check |
+
+## Scraper Service
+
+The `scraper/` directory contains a Claude-powered agent that polls `emergency.uw.edu` and maintains a normalized PostgreSQL database. It is designed to run as a Kubernetes CronJob every 15 minutes.
+
+### Makefile commands
+Once we migrate to using a different frontend stack, it may make sense to utilize `make` to orchestrate both
+the frontend and backend with a single interface. Recommended setup (Windows [chocolatey & make setup](https://medium.com/@AliMasaoodi/installing-make-on-windows-10-using-chocolatey-a-step-by-step-guide-5e178c449394))
+
+```bash
+make db-up      # start Postgres container
+make schema     # create tables and indexes
+make dry-run    # run agent in dry-run mode (no writes)
+make run        # run agent for real (needs ANTHROPIC_API_KEY etc.)
+make db-shell   # inspect the database
+```
+
+## Testing
+
+```bash
+uv run poe test          # Flask app tests (42 tests)
+make test-scraper        # Scraper unit tests (20 tests, no DB needed)
+make test-scraper-full   # All scraper tests including DB (requires make schema)
+uv run poe lint          # Lint check
+```
 
 ## Project Structure
 
@@ -71,107 +152,6 @@ docs/                               # Project planning and specs
 .github/workflows/
   build_test.yml                    # CI: Flask tests + scraper tests (with Postgres)
 ```
-
----
-
-## Local Development
-
-### Prerequisites
-
-- Python 3.10–3.11
-- [uv](https://docs.astral.sh/uv/) package manager
-- Docker (for local PostgreSQL)
-- API keys: `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`
-
-> New to GitHub or SSH? See [docs/github-setup.md](docs/github-setup.md) for a step-by-step guide covering GitHub CLI, SSH key generation, and cloning the repo.
-
-> **Windows users:** The `make` commands below require WSL or GNU Make. Use the `uv run` equivalents listed in each section instead — they work natively on Windows.
-
-### Scraper
-
-**Mac/Linux:**
-```bash
-make db-up          # start Postgres in Docker
-make schema         # create tables and indexes
-make dry-run        # run agent without writing to DB
-make run            # run agent for real
-make batch-history  # import full historical archive
-make audit          # data quality report
-make db-shell       # inspect the database
-```
-
-**Windows (uv run equivalents):**
-```powershell
-# Start Postgres in Docker
-docker run -d --name uw-alerts-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=uw_alerts_dev -p 5432:5432 postgres:15
-
-# Apply schema
-docker exec -i uw-alerts-pg psql -U postgres uw_alerts_dev < scraper/db/schema.sql
-
-# Run agent (dry run — no DB writes)
-$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/uw_alerts_dev"; $env:DRY_RUN="true"; uv run python -m scraper.scraper_agent
-
-# Run agent for real
-$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/uw_alerts_dev"; uv run python -m scraper.scraper_agent
-
-# Import full historical archive
-$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/uw_alerts_dev"; uv run python -m scraper.batch_history
-
-# Data quality report
-$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/uw_alerts_dev"; uv run python -m scraper.audit
-
-# Inspect the database
-docker exec -it uw-alerts-pg psql -U postgres uw_alerts_dev
-```
-
-### Flask app (v1 — being retired)
-
-**Mac/Linux:**
-```bash
-uv sync
-make serve        # foreground — http://127.0.0.1:5000
-make serve-up     # background
-make serve-down   # stop background server
-```
-
-**Windows:**
-```powershell
-uv sync
-cd uw-alert-web
-uv run flask --app=uw-alert-web run
-# → http://127.0.0.1:5000
-```
-
-### Environment Variables
-
-Copy `.env.example` (or create `.env`) in the repo root:
-
-| Variable | Description |
-|---|---|
-| `ANTHROPIC_API_KEY` | Claude API key |
-| `GOOGLE_MAPS_API_KEY` | Geocoding |
-| `DATABASE_URL` | `postgres://user:pass@host:5432/dbname` |
-| `DRY_RUN` | Set to `true` to skip DB writes |
-
-`python-dotenv` loads `.env` automatically when running via `uv run`. On Windows, you can also set variables in PowerShell with `$env:VAR="value"` before each command (as shown above), or use a tool like [direnv](https://direnv.net/).
-
-### Testing
-
-**Mac/Linux:**
-```bash
-uv run poe test           # Flask app tests
-make test-scraper         # Scraper unit tests (no DB required)
-make test-scraper-full    # All scraper tests (requires make schema)
-uv run poe lint           # Lint
-```
-
-**Windows:**
-```powershell
-uv run poe test                                                                    # Flask app tests
-uv run pytest scraper/tests/ --ignore=scraper/tests/test_schema.py --ignore=scraper/tests/test_migrate.py -v  # Scraper unit tests
-uv run poe lint                                                                    # Lint
-```
-
 ---
 
 ## Git Workflow
