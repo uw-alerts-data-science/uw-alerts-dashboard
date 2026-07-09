@@ -8,9 +8,7 @@ export default function Home() {
         <p>MapLibre frontend container proof of concept</p>
       </header>
 
-      <section className="map-shell">
-        <MapLibreMap />
-      </section>
+      <MapLibreMap />
     </main>
   );
 }

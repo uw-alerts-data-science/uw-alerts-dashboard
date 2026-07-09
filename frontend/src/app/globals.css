@@ -12,6 +12,12 @@ body {
   box-sizing: border-box;
 }
 
+button {
+  font-family: inherit;
+}
+
+/* Page shell */
+
 .page {
   min-height: 100vh;
   display: flex;
@@ -34,12 +40,170 @@ body {
   color: #b7c2cc;
 }
 
-.map-shell {
-  flex: 1;
+/* Map + sidebar layout */
+
+.map-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  height: calc(100vh - 83px);
   min-height: 0;
+}
+
+.alert-sidebar {
+  background: #111820;
+  border-right: 1px solid #26313c;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.alert-sidebar h2 {
+  margin: 0 0 16px;
+  font-size: 18px;
 }
 
 .map-container {
   width: 100%;
-  height: calc(100vh - 83px);
+  height: 100%;
+  min-height: 500px;
+}
+
+/* Alert list */
+
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.alert-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #1a232d;
+  color: white;
+  border: 1px solid #2e3b48;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.alert-card:hover {
+  background: #243140;
+}
+
+.alert-card strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.alert-card span {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.alert-card small {
+  display: block;
+  color: #9eabb7;
+}
+
+/* Legend */
+
+.map-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 12px;
+  background: #1a232d;
+  border: 1px solid #2e3b48;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.map-legend div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+/* Category colors */
+
+.alert-marker {
+  width: 26px;
+  height: 26px;
+  border: 3px solid white;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.alert-marker:hover {
+  transform: scale(1.15);
+}
+
+.alert-category {
+  display: inline-block;
+  width: fit-content;
+  color: white;
+  border-radius: 999px;
+  padding: 3px 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.category-robbery {
+  background: #d7263d;
+}
+
+.category-suspicious {
+  background: #f59e0b;
+}
+
+.category-safety {
+  background: #2563eb;
+}
+
+.category-default {
+  background: #6b7280;
+}
+
+
+.maplibregl-popup-content {
+  color: #111827;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.maplibregl-popup-content strong {
+  color: #111827;
+  display: block;
+  margin-bottom: 2px;
+  font-size: 14px;
+}
+
+.maplibregl-popup-content span {
+  color: #374151;
+  display: block;
+  margin-bottom: 1px;
+}
+
+.maplibregl-popup-content small {
+  color: #6b7280;
+  display: block;
+  margin-top: 2px;
+}
+
+.maplibregl-popup-close-button {
+  color: #111827;
+  font-size: 14px;
+  padding: 3px 6px;
 }
