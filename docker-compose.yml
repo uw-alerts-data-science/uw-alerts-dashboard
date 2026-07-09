@@ -10,5 +10,19 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: uw-alerts-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ""
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev
+
 volumes:
   postgres_data:

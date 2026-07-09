@@ -1,0 +1,45 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #101418;
+  color: white;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #26313c;
+  background: #111820;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.header p {
+  margin: 6px 0 0;
+  color: #b7c2cc;
+}
+
+.map-shell {
+  flex: 1;
+  min-height: 0;
+}
+
+.map-container {
+  width: 100%;
+  height: calc(100vh - 83px);
+}
