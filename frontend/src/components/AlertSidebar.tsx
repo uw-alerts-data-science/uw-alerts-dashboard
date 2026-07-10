@@ -1,5 +1,6 @@
 import type { AlertMarker } from "../lib/mockAlerts";
 import { ALERT_CATEGORIES, getCategoryClass } from "../lib/categories";
+import CategoryChart from "./CategoryChart";
 
 type AlertSidebarProps = {
   alerts: AlertMarker[];
