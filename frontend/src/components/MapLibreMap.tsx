@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FeatureCollection, Point } from "geojson";
 import maplibregl, { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { mockAlerts } from "../lib/mockAlerts";
+import { mockAlerts, type AlertMarker } from "../lib/mockAlerts";
+
+const ALERT_CATEGORIES = [
+  "Robbery",
+  "Suspicious Activity",
+  "Safety Notice",
+] as const;
 
 function getCategoryClass(category: string) {
   const normalized = category.toLowerCase();
@@ -16,10 +22,10 @@ function getCategoryClass(category: string) {
   return "default";
 }
 
-function buildAlertsGeoJson(): FeatureCollection<Point> {
+function buildAlertsGeoJson(alerts: AlertMarker[]): FeatureCollection<Point> {
   return {
     type: "FeatureCollection",
-    features: mockAlerts.map((alert) => ({
+    features: alerts.map((alert) => ({
       type: "Feature",
       geometry: {
         type: "Point",
@@ -42,6 +48,16 @@ export default function MapLibreMap() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([
+    ...ALERT_CATEGORIES,
+  ]);
+
+  const filteredAlerts = useMemo(() => {
+    return mockAlerts.filter((alert) =>
+      selectedCategories.includes(alert.category)
+    );
+  }, [selectedCategories]);
+
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
@@ -59,32 +75,32 @@ export default function MapLibreMap() {
     map.on("load", () => {
       map.addSource("alerts", {
         type: "geojson",
-        data: buildAlertsGeoJson(),
+        data: buildAlertsGeoJson(mockAlerts),
         cluster: true,
         clusterMaxZoom: 15,
         clusterRadius: 80,
       });
 
-    map.addLayer({
-      id: "alert-clusters",
-      type: "circle",
-      source: "alerts",
-      filter: ["has", "point_count"],
-      paint: {
-        "circle-color": "#7c3aed",
-        "circle-radius": [
-          "step",
-          ["get", "point_count"],
-          22,
-          3,
-          28,
-          6,
-          34,
-        ],
-        "circle-stroke-width": 3,
-        "circle-stroke-color": "#ffffff",
-      },
-    });
+      map.addLayer({
+        id: "alert-clusters",
+        type: "circle",
+        source: "alerts",
+        filter: ["has", "point_count"],
+        paint: {
+          "circle-color": "#7c3aed",
+          "circle-radius": [
+            "step",
+            ["get", "point_count"],
+            22,
+            3,
+            28,
+            6,
+            34,
+          ],
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#ffffff",
+        },
+      });
 
       map.addLayer({
         id: "alert-cluster-count",
@@ -137,38 +153,36 @@ export default function MapLibreMap() {
         const source = map.getSource("alerts") as GeoJSONSource;
         const zoom = await source.getClusterExpansionZoom(clusterId);
 
-        const geometry = cluster.geometry;
-
-        if (geometry.type !== "Point") return;
+        if (cluster.geometry.type !== "Point") return;
 
         map.easeTo({
-          center: geometry.coordinates as [number, number],
+          center: cluster.geometry.coordinates as [number, number],
           zoom,
         });
       });
 
-    map.on("click", "alert-unclustered", (event: MapMouseEvent) => {
-      const features = map.queryRenderedFeatures(event.point, {
-        layers: ["alert-unclustered"],
+      map.on("click", "alert-unclustered", (event: MapMouseEvent) => {
+        const features = map.queryRenderedFeatures(event.point, {
+          layers: ["alert-unclustered"],
+        });
+
+        const feature = features[0];
+
+        if (!feature || feature.geometry.type !== "Point") return;
+
+        const coordinates = feature.geometry.coordinates as [number, number];
+        const properties = feature.properties;
+
+        if (!properties) return;
+
+        openAlertPopup({
+          coordinates,
+          title: String(properties.title),
+          category: String(properties.category),
+          address: String(properties.address),
+          reportedAt: String(properties.reportedAt),
+        });
       });
-  
-      const feature = features[0];
-  
-      if (!feature || feature.geometry.type !== "Point") return;
-  
-      const coordinates = feature.geometry.coordinates as [number, number];
-      const properties = feature.properties;
-  
-      if (!properties) return;
-  
-      openAlertPopup({
-        coordinates,
-        title: String(properties.title),
-        category: String(properties.category),
-        address: String(properties.address),
-        reportedAt: String(properties.reportedAt),
-      });
-    });
 
       map.on("mouseenter", "alert-clusters", () => {
         map.getCanvas().style.cursor = "pointer";
@@ -192,10 +206,26 @@ export default function MapLibreMap() {
     return () => {
       popupRef.current?.remove();
       popupRef.current = null;
+
       mapRef.current?.remove();
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!map) return;
+
+    const source = map.getSource("alerts") as GeoJSONSource | undefined;
+
+    if (!source) return;
+
+    popupRef.current?.remove();
+    popupRef.current = null;
+
+    source.setData(buildAlertsGeoJson(filteredAlerts));
+  }, [filteredAlerts]);
 
   function openAlertPopup({
     coordinates,
@@ -219,16 +249,18 @@ export default function MapLibreMap() {
     popupRef.current = new maplibregl.Popup({ offset: 18 })
       .setLngLat(coordinates)
       .setHTML(`
-        <strong>${title}</strong><br />
-        <span>${category}</span><br />
-        <span>${address}</span><br />
-        <small>${reportedAt}</small>
+        <div class="popup-content">
+          <strong>${title}</strong>
+          <span>${category}</span>
+          <span>${address}</span>
+          <small>${reportedAt}</small>
+        </div>
       `)
       .addTo(map);
   }
 
   function zoomToAlert(alertId: number) {
-    const alert = mockAlerts.find((item) => item.id === alertId);
+    const alert = filteredAlerts.find((item) => item.id === alertId);
     const map = mapRef.current;
 
     if (!alert || !map) return;
@@ -254,40 +286,59 @@ export default function MapLibreMap() {
     });
   }
 
+  function toggleCategory(category: string) {
+    setSelectedCategories((current) => {
+      if (current.includes(category)) {
+        return current.filter((item) => item !== category);
+      }
+
+      return [...current, category];
+    });
+  }
+
   return (
     <div className="map-layout">
       <aside className="alert-sidebar">
         <h2>Mock Alerts</h2>
 
         <div className="map-legend">
-          <div>
-            <span className="legend-dot category-robbery" />
-            Robbery
-          </div>
-          <div>
-            <span className="legend-dot category-suspicious" />
-            Suspicious Activity
-          </div>
-          <div>
-            <span className="legend-dot category-safety" />
-            Safety Notice
-          </div>
+          {ALERT_CATEGORIES.map((category) => (
+            <label key={category} className="category-filter">
+              <input
+                type="checkbox"
+                checked={selectedCategories.includes(category)}
+                onChange={() => toggleCategory(category)}
+              />
+              <span
+                className={`legend-dot category-${getCategoryClass(category)}`}
+              />
+              {category}
+            </label>
+          ))}
         </div>
 
         <div className="alert-list">
-          {mockAlerts.map((alert) => (
+          {filteredAlerts.map((alert) => (
             <button
               key={alert.id}
               className="alert-card"
               onClick={() => zoomToAlert(alert.id)}
             >
               <strong>{alert.title}</strong>
-              <span className={`alert-category category-${getCategoryClass(alert.category)}`}>
+              <span
+                className={`alert-category category-${getCategoryClass(
+                  alert.category
+                )}`}
+              >
                 {alert.category}
               </span>
               <small>{alert.address}</small>
             </button>
           ))}
+
+          {filteredAlerts.length === 0 && (
+            <p className="empty-state">No alerts match the selected filters.</p>
+          )}
         </div>
       </aside>
 
