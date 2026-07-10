@@ -1,46 +1,24 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { FeatureCollection, Point } from "geojson";
 import maplibregl, { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { mockAlerts, type AlertMarker } from "../lib/mockAlerts";
 
-const ALERT_CATEGORIES = [
-  "Robbery",
-  "Suspicious Activity",
-  "Safety Notice",
-] as const;
+import AlertSidebar from "./AlertSidebar";
+import { mockAlerts } from "../lib/mockAlerts";
+import { buildAlertsGeoJson } from "../lib/alertMapData";
+import {
+  ALERT_CATEGORIES,
+  CATEGORY_COLORS,
+} from "../lib/categories";
 
-function getCategoryClass(category: string) {
-  const normalized = category.toLowerCase();
-
-  if (normalized.includes("robbery")) return "robbery";
-  if (normalized.includes("suspicious")) return "suspicious";
-  if (normalized.includes("safety")) return "safety";
-
-  return "default";
-}
-
-function buildAlertsGeoJson(alerts: AlertMarker[]): FeatureCollection<Point> {
-  return {
-    type: "FeatureCollection",
-    features: alerts.map((alert) => ({
-      type: "Feature",
-      geometry: {
-        type: "Point",
-        coordinates: [alert.longitude, alert.latitude],
-      },
-      properties: {
-        id: alert.id,
-        title: alert.title,
-        category: alert.category,
-        categoryClass: getCategoryClass(alert.category),
-        address: alert.address,
-        reportedAt: alert.reportedAt,
-      },
-    })),
-  };
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 export default function MapLibreMap() {
@@ -87,7 +65,7 @@ export default function MapLibreMap() {
         source: "alerts",
         filter: ["has", "point_count"],
         paint: {
-          "circle-color": "#7c3aed",
+          "circle-color": CATEGORY_COLORS.cluster,
           "circle-radius": [
             "step",
             ["get", "point_count"],
@@ -127,12 +105,12 @@ export default function MapLibreMap() {
             "match",
             ["get", "categoryClass"],
             "robbery",
-            "#d7263d",
+            CATEGORY_COLORS.robbery,
             "suspicious",
-            "#f59e0b",
+            CATEGORY_COLORS.suspicious,
             "safety",
-            "#2563eb",
-            "#6b7280",
+            CATEGORY_COLORS.safety,
+            CATEGORY_COLORS.default,
           ],
           "circle-radius": 10,
           "circle-stroke-width": 3,
@@ -250,10 +228,10 @@ export default function MapLibreMap() {
       .setLngLat(coordinates)
       .setHTML(`
         <div class="popup-content">
-          <strong>${title}</strong>
-          <span>${category}</span>
-          <span>${address}</span>
-          <small>${reportedAt}</small>
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(category)}</span>
+          <span>${escapeHtml(address)}</span>
+          <small>${escapeHtml(reportedAt)}</small>
         </div>
       `)
       .addTo(map);
@@ -298,49 +276,12 @@ export default function MapLibreMap() {
 
   return (
     <div className="map-layout">
-      <aside className="alert-sidebar">
-        <h2>Mock Alerts</h2>
-
-        <div className="map-legend">
-          {ALERT_CATEGORIES.map((category) => (
-            <label key={category} className="category-filter">
-              <input
-                type="checkbox"
-                checked={selectedCategories.includes(category)}
-                onChange={() => toggleCategory(category)}
-              />
-              <span
-                className={`legend-dot category-${getCategoryClass(category)}`}
-              />
-              {category}
-            </label>
-          ))}
-        </div>
-
-        <div className="alert-list">
-          {filteredAlerts.map((alert) => (
-            <button
-              key={alert.id}
-              className="alert-card"
-              onClick={() => zoomToAlert(alert.id)}
-            >
-              <strong>{alert.title}</strong>
-              <span
-                className={`alert-category category-${getCategoryClass(
-                  alert.category
-                )}`}
-              >
-                {alert.category}
-              </span>
-              <small>{alert.address}</small>
-            </button>
-          ))}
-
-          {filteredAlerts.length === 0 && (
-            <p className="empty-state">No alerts match the selected filters.</p>
-          )}
-        </div>
-      </aside>
+      <AlertSidebar
+        alerts={filteredAlerts}
+        selectedCategories={selectedCategories}
+        onToggleCategory={toggleCategory}
+        onAlertClick={zoomToAlert}
+      />
 
       <div ref={mapContainer} className="map-container" />
     </div>
