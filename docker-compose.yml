@@ -24,5 +24,15 @@ services:
       - /app/node_modules
     command: npm run dev
 
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: uw-alerts-api
+    ports:
+      - "8000:8000"
+    environment:
+      FLASK_ENV: development
+
 volumes:
   postgres_data:
