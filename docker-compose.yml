@@ -35,6 +35,10 @@ services:
       - "8000:8000"
     environment:
       FLASK_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/uw_alerts_dev
+    depends_on:
+      - postgres
+
 
 volumes:
   postgres_data:

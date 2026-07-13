@@ -1,6 +1,8 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 
+from db import get_connection
+
 
 app = Flask(__name__)
 
@@ -24,39 +26,50 @@ def health():
 
 @app.get("/api/alerts")
 def get_alerts():
-    return jsonify(
+    query = """
+        SELECT
+          i.id,
+          COALESCE(NULLIF(a.summary, ''), i.category || ' Alert') AS title,
+          i.category,
+          COALESCE(i.google_address, i.nearest_address) AS address,
+          i.lat::float AS latitude,
+          i.lng::float AS longitude,
+          COALESCE(a.reported_at, i.first_reported_at, i.occurred_at, i.created_at) AS reported_at
+        FROM incidents i
+        LEFT JOIN LATERAL (
+          SELECT *
+          FROM alerts a
+          WHERE a.incident_id = i.id
+          ORDER BY a.reported_at DESC NULLS LAST, a.created_at DESC
+          LIMIT 1
+        ) a ON true
+        WHERE i.lat IS NOT NULL
+          AND i.lng IS NOT NULL
+        ORDER BY reported_at DESC NULLS LAST
+        LIMIT 100;
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            rows = cur.fetchall()
+
+    alerts = [
         {
-            "alerts": [
-                {
-                    "id": 1,
-                    "title": "Test UW Alert",
-                    "category": "Safety Notice",
-                    "address": "University of Washington, Seattle, WA",
-                    "latitude": 47.6553,
-                    "longitude": -122.3035,
-                    "reportedAt": "2026-07-09T12:00:00Z",
-                },
-                {
-                    "id": 2,
-                    "title": "Suspicious Activity",
-                    "category": "Suspicious Activity",
-                    "address": "University District, Seattle, WA",
-                    "latitude": 47.6614,
-                    "longitude": -122.3132,
-                    "reportedAt": "2026-07-09T12:15:00Z",
-                },
-                {
-                    "id": 3,
-                    "title": "Robbery Report",
-                    "category": "Robbery",
-                    "address": "Near UW Medical Center",
-                    "latitude": 47.6502,
-                    "longitude": -122.3078,
-                    "reportedAt": "2026-07-09T12:30:00Z",
-                },
-            ]
+            "id": row["id"],
+            "title": row["title"],
+            "category": row["category"],
+            "address": row["address"],
+            "latitude": row["latitude"],
+            "longitude": row["longitude"],
+            "reportedAt": row["reported_at"].isoformat()
+            if row["reported_at"]
+            else None,
         }
-    )
+        for row in rows
+    ]
+
+    return jsonify({"alerts": alerts})
 
 
 if __name__ == "__main__":

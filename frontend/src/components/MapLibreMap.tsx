@@ -8,7 +8,10 @@ import AlertSidebar from "./AlertSidebar";
 import type { AlertMarker } from "../lib/mockAlerts";
 import { fetchAlerts } from "../lib/api";
 import { buildAlertsGeoJson } from "../lib/alertMapData";
-import { ALERT_CATEGORIES, CATEGORY_COLORS } from "../lib/categories";
+import {
+  CATEGORY_COLORS,
+  getAlertCategories,
+} from "../lib/categories";
 
 function escapeHtml(value: string) {
   return value
@@ -29,9 +32,8 @@ export default function MapLibreMap() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
 
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([
-    ...ALERT_CATEGORIES,
-  ]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const hasInitializedFilters = useRef(false);
 
   const filteredAlerts = useMemo(() => {
     return alerts.filter((alert) => selectedCategories.includes(alert.category));
@@ -127,11 +129,25 @@ export default function MapLibreMap() {
             ["get", "categoryClass"],
             "robbery",
             CATEGORY_COLORS.robbery,
+            "assault",
+            CATEGORY_COLORS.assault,
             "suspicious",
             CATEGORY_COLORS.suspicious,
-            "safety",
-            CATEGORY_COLORS.safety,
-            CATEGORY_COLORS.default,
+            "fire",
+            CATEGORY_COLORS.fire,
+            "medical",
+            CATEGORY_COLORS.medical,
+            "hazmat",
+            CATEGORY_COLORS.hazmat,
+            "sexualAssault",
+            CATEGORY_COLORS.sexualAssault,
+            "theft",
+            CATEGORY_COLORS.theft,
+            "motorVehicle",
+            CATEGORY_COLORS.motorVehicle,
+            "disturbance",
+            CATEGORY_COLORS.disturbance,
+            CATEGORY_COLORS.other,
           ],
           "circle-radius": 10,
           "circle-stroke-width": 3,
@@ -262,6 +278,16 @@ export default function MapLibreMap() {
       .addTo(map);
   }
 
+  const categories = useMemo(() => {
+    return getAlertCategories(alerts);                    ////////////////////////////////////
+  }, [alerts]);
+  useEffect(() => {
+    if (hasInitializedFilters.current) return;
+    if (categories.length === 0) return;
+    setSelectedCategories(categories);
+    hasInitializedFilters.current = true;
+  }, [categories]);
+
   function zoomToAlert(alertId: number) {
     const alert = filteredAlerts.find((item) => item.id === alertId);
     const map = mapRef.current;
@@ -301,14 +327,15 @@ export default function MapLibreMap() {
 
   return (
     <div className="map-layout">
-      <AlertSidebar
-        alerts={filteredAlerts}
-        selectedCategories={selectedCategories}
-        onToggleCategory={toggleCategory}
-        onAlertClick={zoomToAlert}
-        isLoading={isLoading}
-        errorMessage={errorMessage}
-      />
+    <AlertSidebar
+      alerts={filteredAlerts}
+      categories={categories}
+      selectedCategories={selectedCategories}
+      onToggleCategory={toggleCategory}
+      onAlertClick={zoomToAlert}
+      isLoading={isLoading}
+      errorMessage={errorMessage}
+    />
 
       <div ref={mapContainer} className="map-container" />
     </div>

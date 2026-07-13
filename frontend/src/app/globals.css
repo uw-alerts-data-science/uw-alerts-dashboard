@@ -161,12 +161,44 @@ button {
   background: #d7263d;
 }
 
+.category-assault {
+  background: #dc2626;
+}
+
 .category-suspicious {
   background: #f59e0b;
 }
 
-.category-safety {
-  background: #2563eb;
+.category-fire {
+  background: #ea580c;
+}
+
+.category-medical {
+  background: #0891b2;
+}
+
+.category-hazmat {
+  background: #84cc16;
+}
+
+.category-sexualAssault {
+  background: #be185d;
+}
+
+.category-theft {
+  background: #9333ea;
+}
+
+.category-motorVehicle {
+  background: #0f766e;
+}
+
+.category-disturbance {
+  background: #64748b;
+}
+
+.category-other {
+  background: #6b7280;
 }
 
 .category-default {
@@ -224,7 +256,6 @@ button {
 
 .category-chart-container {
   width: 100%;
-  height: 220px;
 }
 
 .error-state {

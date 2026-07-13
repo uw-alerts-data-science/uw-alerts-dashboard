@@ -1,9 +1,10 @@
 import CategoryChart from "./CategoryChart";
 import type { AlertMarker } from "../lib/mockAlerts";
-import { ALERT_CATEGORIES, getCategoryClass } from "../lib/categories";
+import { getCategoryClass } from "../lib/categories";
 
 type AlertSidebarProps = {
   alerts: AlertMarker[];
+  categories: string[];
   selectedCategories: string[];
   onToggleCategory: (category: string) => void;
   onAlertClick: (alertId: number) => void;
@@ -13,6 +14,7 @@ type AlertSidebarProps = {
 
 export default function AlertSidebar({
   alerts,
+  categories,
   selectedCategories,
   onToggleCategory,
   onAlertClick,
@@ -24,7 +26,7 @@ export default function AlertSidebar({
       <h2>Alerts</h2>
 
       <div className="map-legend">
-        {ALERT_CATEGORIES.map((category) => (
+        {categories.map((category) => (
           <label key={category} className="category-filter">
             <input
               type="checkbox"
