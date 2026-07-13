@@ -5,12 +5,10 @@ import maplibregl, { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import AlertSidebar from "./AlertSidebar";
-import { mockAlerts } from "../lib/mockAlerts";
+import type { AlertMarker } from "../lib/mockAlerts";
+import { fetchAlerts } from "../lib/api";
 import { buildAlertsGeoJson } from "../lib/alertMapData";
-import {
-  ALERT_CATEGORIES,
-  CATEGORY_COLORS,
-} from "../lib/categories";
+import { ALERT_CATEGORIES, CATEGORY_COLORS } from "../lib/categories";
 
 function escapeHtml(value: string) {
   return value
@@ -26,15 +24,38 @@ export default function MapLibreMap() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 
+  const [alerts, setAlerts] = useState<AlertMarker[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+
   const [selectedCategories, setSelectedCategories] = useState<string[]>([
     ...ALERT_CATEGORIES,
   ]);
 
   const filteredAlerts = useMemo(() => {
-    return mockAlerts.filter((alert) =>
-      selectedCategories.includes(alert.category)
-    );
-  }, [selectedCategories]);
+    return alerts.filter((alert) => selectedCategories.includes(alert.category));
+  }, [alerts, selectedCategories]);
+
+  useEffect(() => {
+    async function loadAlerts() {
+      try {
+        setIsLoading(true);
+        setErrorMessage(null);
+
+        const apiAlerts = await fetchAlerts();
+
+        setAlerts(apiAlerts);
+      } catch (error) {
+        console.error(error);
+        setErrorMessage("Unable to load alerts from the Flask API.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadAlerts();
+  }, []);
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
@@ -53,7 +74,7 @@ export default function MapLibreMap() {
     map.on("load", () => {
       map.addSource("alerts", {
         type: "geojson",
-        data: buildAlertsGeoJson(mockAlerts),
+        data: buildAlertsGeoJson([]),
         cluster: true,
         clusterMaxZoom: 15,
         clusterRadius: 80,
@@ -179,6 +200,7 @@ export default function MapLibreMap() {
       });
 
       map.resize();
+      setIsMapLoaded(true);
     });
 
     return () => {
@@ -187,13 +209,16 @@ export default function MapLibreMap() {
 
       mapRef.current?.remove();
       mapRef.current = null;
+
+      setIsMapLoaded(false);
+
     };
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
 
-    if (!map) return;
+    if (!map || !isMapLoaded) return;
 
     const source = map.getSource("alerts") as GeoJSONSource | undefined;
 
@@ -203,7 +228,7 @@ export default function MapLibreMap() {
     popupRef.current = null;
 
     source.setData(buildAlertsGeoJson(filteredAlerts));
-  }, [filteredAlerts]);
+  }, [filteredAlerts, isMapLoaded]);
 
   function openAlertPopup({
     coordinates,
@@ -281,6 +306,8 @@ export default function MapLibreMap() {
         selectedCategories={selectedCategories}
         onToggleCategory={toggleCategory}
         onAlertClick={zoomToAlert}
+        isLoading={isLoading}
+        errorMessage={errorMessage}
       />
 
       <div ref={mapContainer} className="map-container" />
