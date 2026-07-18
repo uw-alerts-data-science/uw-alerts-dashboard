@@ -40,5 +40,20 @@ services:
       - postgres
 
 
+  scraper:
+    build:
+      context: .
+      dockerfile: docker/scraper.Dockerfile
+    container_name: uw-alerts-scraper
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/uw_alerts_dev
+      DRY_RUN: "false"
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    depends_on:
+      - postgres
+    profiles:
+      - jobs
+
 volumes:
   postgres_data:
