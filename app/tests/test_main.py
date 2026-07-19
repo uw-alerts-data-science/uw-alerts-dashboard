@@ -1,8 +1,8 @@
 """Tests for the FastAPI backend.
 
-These are DB-free: the query endpoints override the `get_db` dependency with a
-fake connection and monkeypatch the DB helpers, so the suite runs in CI without
-a live Postgres (mirroring `poe test-scraper`).
+These are DB-free: endpoints that depend on `get_db` override it with a fake
+connection and monkeypatch the DB helpers, so the suite runs in CI without a
+live Postgres (mirroring `poe test-scraper`).
 """
 
 from fastapi.testclient import TestClient
@@ -18,16 +18,14 @@ def _fake_db():
     yield object()
 
 
-def test_read_root():
-    resp = client.get("/")
-    assert resp.status_code == 200
-    assert resp.json() == {"Hello": "World"}
-
-
-def test_read_item():
-    resp = client.get("/items/42", params={"q": "hello"})
-    assert resp.status_code == 200
-    assert resp.json() == {"item_id": 42, "q": "hello"}
+def test_health():
+    app.dependency_overrides[get_db] = _fake_db
+    try:
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "healthy"}
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_recent_incidents(monkeypatch):
