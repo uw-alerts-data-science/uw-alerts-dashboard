@@ -62,10 +62,10 @@ help = "Check lint without modifying files"
 cmd = "ruff check ."
 
 [tool.poe.tasks.test]
-help = "Run app + scraper unit tests (no DB required)"
+help = "Run app + scraper unit tests with coverage (no DB required)"
 sequence = [
-    { cmd = "pytest app/tests/ -v" },
-    { ref = "test-scraper" },
+    { cmd = "coverage run -m pytest app/tests/ scraper/tests/ --ignore=scraper/tests/test_schema.py --ignore=scraper/tests/test_migrate.py --ignore=scraper/tests/test_schema_apply.py -v" },
+    { cmd = "coverage report -m" },
 ]
 
 [tool.poe.tasks.test-scraper]
