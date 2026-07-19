@@ -1,0 +1,12 @@
+# Dev-only overrides — loaded automatically by `docker compose up`.
+# Bind-mounts your local source over the baked-in copy and swaps the
+# production `fastapi run` for `fastapi dev` (uvicorn --reload) so edits
+# hot-reload without a rebuild.
+#
+# For a production-like run that ignores this file:
+#   docker compose -f docker-compose.yml up --build
+services:
+  api:
+    volumes:
+      - ./app:/app/app
+    command: ["uv", "run", "fastapi", "dev", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]

@@ -13,7 +13,6 @@ dependencies = [
     "gunicorn",
     "folium==0.14.0",
     "shapely==2.0.1",
-    "flask==2.2.2",
     "werkzeug>=2.2,<3.0",
     "numpy==1.24.2",
     "fiona>=1.8,<1.10",
@@ -27,6 +26,7 @@ dependencies = [
     "psycopg2-binary>=2.9",
     "pandas>=1.5",
     "transformers>=5.12.1",
+    "fastapi[standard]>=0.139.2",
 ]
 
 [dependency-groups]
@@ -62,10 +62,10 @@ help = "Check lint without modifying files"
 cmd = "ruff check ."
 
 [tool.poe.tasks.test]
-help = "Run unit tests with coverage report"
+help = "Run app + scraper unit tests with coverage (no DB required)"
 sequence = [
-    { cmd = "coverage run --rcfile=.coverage.rc -m unittest discover", cwd = "uw-alert-web" },
-    { cmd = "coverage report", cwd = "uw-alert-web" },
+    { cmd = "coverage run -m pytest app/tests/ scraper/tests/ --ignore=scraper/tests/test_schema.py --ignore=scraper/tests/test_migrate.py --ignore=scraper/tests/test_schema_apply.py -v" },
+    { cmd = "coverage report -m" },
 ]
 
 [tool.poe.tasks.test-scraper]
@@ -85,11 +85,6 @@ cmd = "python -c \"import psycopg2, os; from scraper.db.dump import dump_to_csv;
 help = "Seed DB from data/snapshot/ CSV files (skips if already populated)"
 cmd = "python -c \"import psycopg2, os; from scraper.db.migrate import seed_if_empty; conn = psycopg2.connect(os.environ['DATABASE_URL']); print(seed_if_empty('data/snapshot', conn)); conn.close()\""
 
-[tool.poe.tasks.serve]
-help = "Start the Flask web app"
-cmd = "flask --app=uw-alert-web run"
-cwd = "uw-alert-web"
-
 [tool.poe.tasks.db-down]
 help = "Stop local Postgres container"
 cmd = "docker compose down"
@@ -104,10 +99,10 @@ sequence = [
 ]
 
 [tool.poe.tasks.dev]
-help = "Full local dev: postgres up, schema, seed, and Flask at http://127.0.0.1:5000"
+help = "Full local dev: postgres + FastAPI (hot-reload) at http://localhost:8000, then tail logs"
 sequence = [
   { ref = "setup" },
-  { ref = "serve" },
+  { cmd = "docker compose logs -f api" },
 ]
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,11 @@
+[run]
+source =
+    app
+    scraper
+omit =
+    */__init__.py
+    */tests/*
+
+[report]
+exclude_lines =
+    if __name__ == '__main__':
