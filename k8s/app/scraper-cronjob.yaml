@@ -7,8 +7,6 @@
 #
 # We reuse the API image and override the command (same trick as the schema Job).
 # The root Dockerfile bakes the whole repo, so `-m scraper.scraper_agent` works;
-# the standalone scraper/Dockerfile does NOT (its build context can't import the
-# `scraper` package) — which is why we don't use it.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
