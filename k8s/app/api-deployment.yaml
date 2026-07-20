@@ -1,0 +1,67 @@
+# The FastAPI backend.
+#
+# A Deployment manages a set of identical, stateless pods. If a pod dies, the
+# Deployment starts a new one; when you `kubectl set image` (or `apply` a new
+# image tag), it does a rolling update — new pods come up healthy before old
+# ones are removed, so there's no downtime.
+#
+# This is the RIGHT controller for a stateless web server (contrast: the
+# database uses a StatefulSet, because it has a disk and an identity).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi
+  namespace: uwalerts
+spec:
+  replicas: 1                      # bump to 2+ later for zero-downtime + redundancy
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    metadata:
+      labels:
+        app: fastapi               # this label is how the Service (below) finds these pods
+    spec:
+      containers:
+        - name: fastapi
+          # CI rewrites this tag to the git SHA on every deploy. The :latest here
+          # is only a placeholder so the manifest is valid before the first deploy.
+          image: registry.digitalocean.com/uwalerts/api:latest
+          ports:
+            - containerPort: 8000  # the port `fastapi run` listens on (see root Dockerfile)
+          envFrom:
+            # Pull ALL keys from the Secret in as environment variables. The API
+            # only reads DATABASE_URL; the extra scraper keys are harmless here.
+            - secretRef:
+                name: uwalerts-secrets
+          # --- Health probes ---------------------------------------------------
+          # readiness = "should this pod receive traffic yet?" We use /health,
+          # which opens a DB connection, so a pod is only "ready" once it can
+          # actually serve queries. Good.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # liveness = "is this pod wedged and needs a restart?" We DELIBERATELY
+          # keep this lax. Because /health touches the DB, an aggressive liveness
+          # probe would kill every API pod whenever Postgres blips — a crash loop
+          # that looks like an app bug. Long delay + high failureThreshold means
+          # only a truly stuck pod gets restarted. (Best fix later: add a cheap
+          # DB-free health endpoint and point liveness at that instead.)
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 6
+          resources:
+            # requests = what the scheduler reserves; limits = the hard ceiling.
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
