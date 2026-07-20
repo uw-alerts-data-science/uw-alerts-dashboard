@@ -44,6 +44,11 @@ jobs:
           path-to-lcov: coverage.lcov
           flag-name: run ${{ join(matrix.*, ' - ') }}
           parallel: true
+  docker_build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t uwalerts-api:ci
 
   test_scraper:
     runs-on: ubuntu-latest
