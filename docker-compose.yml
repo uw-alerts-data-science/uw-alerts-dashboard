@@ -22,10 +22,8 @@ services:
     container_name: uw-alerts-api
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: ${DATABASE_URL}
     env_file:
-      - .env
+      - ./.env
     depends_on:
       postgres:
         condition: service_healthy
