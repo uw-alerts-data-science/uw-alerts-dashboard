@@ -2,9 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function Navbar() {
   const pathname = usePathname();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [pathname]);
 
   return (
     <header className="site-navbar">
@@ -12,7 +18,23 @@ export default function Navbar() {
         UW Alerts
       </Link>
 
-      <nav className="site-nav-links">
+      <button
+        type="button"
+        className={`nav-toggle ${isMenuOpen ? "open" : ""}`}
+        aria-label="Toggle navigation"
+        aria-expanded={isMenuOpen}
+        aria-controls="site-navigation"
+        onClick={() => setIsMenuOpen((current) => !current)}
+      >
+        <span />
+        <span />
+        <span />
+      </button>
+
+      <nav
+        id="site-navigation"
+        className={`site-nav-links ${isMenuOpen ? "open" : ""}`}
+      >
         <Link
           href="/"
           className={

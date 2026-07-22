@@ -35,6 +35,7 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const hasInitializedFilters = useRef(false);
@@ -344,16 +345,54 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
 
   return (
     <div className="map-layout">
-    <AlertSidebar
-      alerts={filteredAlerts}
-      categories={categories}
-      selectedCategories={selectedCategories}
-      onToggleCategory={toggleCategory}
-      onAlertClick={zoomToAlert}
-      isLoading={isLoading}
-      errorMessage={errorMessage}
-    />
-
+      <button
+        type="button"
+        className="mobile-sidebar-toggle"
+        onClick={() => setIsSidebarOpen(true)}
+        aria-expanded={isSidebarOpen}
+        aria-controls="alert-sidebar-panel"
+      >
+        Alerts & Filters
+      </button>
+  
+      {isSidebarOpen && (
+        <button
+          type="button"
+          className="sidebar-backdrop"
+          aria-label="Close alert sidebar"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+  
+      <div
+        id="alert-sidebar-panel"
+        className={`sidebar-panel ${
+          isSidebarOpen ? "sidebar-panel-open" : ""
+        }`}
+      >
+        <button
+          type="button"
+          className="mobile-sidebar-close"
+          aria-label="Close alert sidebar"
+          onClick={() => setIsSidebarOpen(false)}
+        >
+          ×
+        </button>
+      
+        <AlertSidebar
+          alerts={filteredAlerts}
+          categories={categories}
+          selectedCategories={selectedCategories}
+          onToggleCategory={toggleCategory}
+          onAlertClick={(alertId) => {
+            zoomToAlert(alertId);
+            setIsSidebarOpen(false);
+          }}
+          isLoading={isLoading}
+          errorMessage={errorMessage}
+        />
+      </div>
+        
       <div ref={mapContainer} className="map-container" />
     </div>
   );
