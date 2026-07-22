@@ -480,6 +480,34 @@ button {
   font-size: 14px;
 }
 
+
+
+
+
+
+
+.no-active-alerts {
+  margin-top: 18px;
+  padding: 20px 16px;
+
+  color: #cbd5e1;
+  background: #1a232d;
+
+  border: 1px solid #2e3b48;
+  border-radius: 8px;
+
+  text-align: center;
+  font-size: 15px;
+}
+
+
+
+
+
+
+
+
+
 /* Mobile layout */
 
 @media (max-width: 768px) {
