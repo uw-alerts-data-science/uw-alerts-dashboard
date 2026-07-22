@@ -34,14 +34,14 @@ jobs:
         run: uv run poe test
 
       - name: Generate coverage lcov
-        run: cd uw-alert-web && uv run coverage lcov
+        run: uv run coverage lcov -o coverage.lcov
 
       - name: Report code coverage to Coveralls
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          base-path: uw-alert-web
-          path-to-lcov: uw-alert-web/coverage.lcov
+          base-path: .
+          path-to-lcov: coverage.lcov
           flag-name: run ${{ join(matrix.*, ' - ') }}
           parallel: true
 

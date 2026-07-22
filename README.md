@@ -47,7 +47,7 @@ For this project the key installations are to have uv, Docker, Chocolatey/Homebr
 - Package Managers: Windows - [Download Chocolatey](https://chocolatey.org/install), Mac - [Download Brew Package Manager](https://docs.brew.sh/Installation)
 - GNU make - Build automation tool
 - [uv](https://docs.astral.sh/uv/) package manager
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for local PostgreSQL)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) or [OrbStack](https://orbstack.dev/) (for local PostgreSQL + the FastAPI backend)
 - API keys: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `MAPBOX_API_KEY`
 
 ### Quickstart
@@ -96,6 +96,54 @@ of uv (package manager) and poe to setup the backend python services (currently 
 | `uv run poe test` | Flask app unit tests |
 | `uv run poe test-scraper` | Scraper unit tests (no DB required) |
 | `uv run poe lint` | Lint check |
+
+### Running with Docker Compose (OrbStack / Docker Desktop)
+
+The FastAPI backend and PostgreSQL can be run together as two containers via
+Docker Compose. This works identically under [OrbStack](https://orbstack.dev/)
+and Docker Desktop — OrbStack is just a faster Docker engine, no config changes
+needed.
+
+```
+docker compose            # your Mac
+├── postgres  (localhost:5432)   ← reachable from host tools (psql, DBeaver, scraper)
+└── api       (localhost:8000)   ← FastAPI, connects to DB at host "postgres:5432"
+```
+
+**Networking gotcha:** inside the compose network, containers reach each other
+by *service name*, so the `api` container connects to the DB at
+`postgres://...@postgres:5432/...`. Anything on your Mac (psql, a locally-run
+scraper) still uses `localhost:5432`. The compose file sets the in-network
+`DATABASE_URL` for you.
+
+```bash
+# Dev — hot reload (docker-compose.override.yml applied automatically)
+docker compose up --build
+# → API at http://localhost:8000  (docs at /docs), Postgres at localhost:5432
+# Edits to app/ reload instantly via `fastapi dev`; no rebuild needed.
+
+# Just the database (e.g. to run the API or scraper on the host)
+docker compose up -d postgres
+
+# Production-like run — ignores the dev override, uses the baked image
+docker compose -f docker-compose.yml up --build
+
+# Tear down (keeps the postgres_data volume)
+docker compose down
+```
+
+**How the override works:** `docker compose up` auto-merges
+`docker-compose.yml` (base, production-shaped: baked image + `fastapi run`) with
+`docker-compose.override.yml` (dev deltas: bind-mount `./app` + `fastapi dev
+--reload`). Source edits hot-reload; **dependency changes** (`pyproject.toml` /
+`uv.lock`) still require `docker compose up --build` since deps live in the
+image's virtualenv. Naming the base file explicitly with `-f` skips the
+override for a clean production run.
+
+> The DB container here uses the same `uw_alerts_dev` database and `postgres`
+> volume conventions as the `make db-up` / poe setup, so schema and seed steps
+> still apply. The schema is not auto-applied — run `make schema` (or the poe
+> equivalent) against `localhost:5432` once the DB container is up.
 
 ## Scraper Service
 

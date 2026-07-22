@@ -1,0 +1,30 @@
+-- Description: Average peak time of day by month 
+-- Columns: year, month, hour, count  
+
+SQL Query:
+
+select
+extract(year from i.first_reported_at) as year,
+extract(month from i.first_reported_at) as month,
+extract(hour from i.first_reported_at) as hour,
+count(*) as count
+from incidents i
+group by year, month, hour
+ORDER BY year, month, hour;
+
+
+-- Description: Category based year line trends
+-- & By year incidents pie chart
+-- Users ideally would be able to siwtch between categories
+-- and see the historical trend by year
+-- Columns: category, year, count
+
+SQL Query:
+
+select
+    category,
+    EXTRACT(YEAR FROM first_reported_at) AS year,
+    COUNT(*) AS count
+FROM incidents
+group by category, year
+order by year;

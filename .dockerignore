@@ -1,0 +1,27 @@
+# Local virtualenv and caches — rebuilt inside the image by `uv sync`
+.venv
+__pycache__
+*.pyc
+.ruff_cache
+.pytest_cache
+
+# Secrets — provided at runtime via env_file / environment, never baked in
+.env
+.flask.pid
+
+# Git and worktrees
+.git
+.worktrees
+
+# Editor / OS cruft
+.DS_Store
+
+# Not needed in the API image
+uw-alert-web
+templates
+static
+data
+docs
+doc
+examples
+DS-Analytics

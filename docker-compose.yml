@@ -9,6 +9,25 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d uw_alerts_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Inside the compose network the DB host is the service name "postgres",
+      # NOT localhost. This value overrides any DATABASE_URL from .env below.
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/uw_alerts_dev
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:
