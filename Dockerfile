@@ -1,5 +1,5 @@
 
-FROM python:3.12-slim-bookworm
+FROM python:3.11-slim-bookworm
 
 # Installations for build
 RUN apt-get update && apt-get install -y \
@@ -15,9 +15,8 @@ ENV GDAL_CONFIG=/usr/bin/gdal-config
 COPY --from=ghcr.io/astral-sh/uv@sha256:eb2843a1e56fd9e30c7276ce1a52cba86e64c7b385f5e3279a0e08e02dd058fc /uv /uvx /bin/
 
 # Copy the project into the image
-COPY . /app
-# Copy lock files first for optimal caching
-COPY pyproject.toml uv.lock /app
+COPY pyproject.toml uv.lock /app/
+
 
 # Disable development dependencies
 ENV UV_NO_DEV=1
@@ -27,7 +26,7 @@ WORKDIR /app
 
 # Sync dependencies using --frozen instead of --locked
 RUN uv sync --frozen --no-dev --no-install-project
+COPY . /app/
 
-
-expose 8000
+EXPOSE 8000
 CMD ["uv", "run", "fastapi", "run", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]

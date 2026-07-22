@@ -16,13 +16,14 @@ services:
       retries: 5
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uw-alerts-api
     ports:
       - "8000:8000"
     environment:
-      # Inside the compose network the DB host is the service name "postgres",
-      # NOT localhost. This value overrides any DATABASE_URL from .env below.
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/uw_alerts_dev
+      DATABASE_URL: ${DATABASE_URL}
     env_file:
       - .env
     depends_on:
@@ -44,20 +45,6 @@ services:
     command: npm run dev
     depends_on:
       - api
-
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    container_name: uw-alerts-api
-    ports:
-      - "8000:8000"
-    environment:
-      FLASK_ENV: development
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/uw_alerts_dev
-    depends_on:
-      - postgres
-
 
   scraper:
     build:
