@@ -29,9 +29,9 @@ def health():
 def get_alerts():
     hours = request.args.get("hours", type=int)
 
-    if hours is not None and not 1 <= hours <= 168:
+    if hours is not None and not 1 <= hours <= 999:
         return jsonify(
-            {"error": "hours must be between 1 and 168"}
+            {"error": "hours must be between 1 and 999"}
         ), 400
 
     recent_filter = ""
