@@ -2,6 +2,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from db import get_connection
+from flask import Flask, jsonify, request
 
 
 app = Flask(__name__)
@@ -26,32 +27,74 @@ def health():
 
 @app.get("/api/alerts")
 def get_alerts():
-    query = """
+    hours = request.args.get("hours", type=int)
+
+    if hours is not None and not 1 <= hours <= 168:
+        return jsonify(
+            {"error": "hours must be between 1 and 168"}
+        ), 400
+
+    recent_filter = ""
+    order_by = "reported_at DESC NULLS LAST"
+    parameters = []
+
+    if hours is not None:
+        recent_filter = """
+            AND scrape.scraped_at >=
+                NOW() - (%s * INTERVAL '1 hour')
+        """
+        order_by = "scrape.scraped_at DESC NULLS LAST"
+        parameters.append(hours)
+
+    query = f"""
         SELECT
-          i.id,
-          COALESCE(NULLIF(a.summary, ''), i.category || ' Alert') AS title,
-          i.category,
-          COALESCE(i.google_address, i.nearest_address) AS address,
-          i.lat::float AS latitude,
-          i.lng::float AS longitude,
-          COALESCE(a.reported_at, i.first_reported_at, i.occurred_at, i.created_at) AS reported_at
+            i.id,
+            COALESCE(
+                NULLIF(a.summary, ''),
+                i.category || ' Alert'
+            ) AS title,
+            i.category,
+            COALESCE(
+                i.google_address,
+                i.nearest_address
+            ) AS address,
+            i.lat::float AS latitude,
+            i.lng::float AS longitude,
+            COALESCE(
+                a.reported_at,
+                i.first_reported_at,
+                i.occurred_at,
+                i.created_at
+            ) AS reported_at
         FROM incidents i
+
         LEFT JOIN LATERAL (
-          SELECT *
-          FROM alerts a
-          WHERE a.incident_id = i.id
-          ORDER BY a.reported_at DESC NULLS LAST, a.created_at DESC
-          LIMIT 1
+            SELECT *
+            FROM alerts a
+            WHERE a.incident_id = i.id
+            ORDER BY
+                a.reported_at DESC NULLS LAST,
+                a.created_at DESC
+            LIMIT 1
         ) a ON true
+
+        LEFT JOIN LATERAL (
+            SELECT MAX(created_at) AS scraped_at
+            FROM alerts
+            WHERE incident_id = i.id
+        ) scrape ON true
+
         WHERE i.lat IS NOT NULL
           AND i.lng IS NOT NULL
-        ORDER BY reported_at DESC NULLS LAST
+          {recent_filter}
+
+        ORDER BY {order_by}
         LIMIT 100;
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query)
+            cur.execute(query, parameters)
             rows = cur.fetchall()
 
     alerts = [
@@ -62,9 +105,11 @@ def get_alerts():
             "address": row["address"],
             "latitude": row["latitude"],
             "longitude": row["longitude"],
-            "reportedAt": row["reported_at"].isoformat()
-            if row["reported_at"]
-            else None,
+            "reportedAt": (
+                row["reported_at"].isoformat()
+                if row["reported_at"]
+                else None
+            ),
         }
         for row in rows
     ]

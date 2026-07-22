@@ -267,3 +267,71 @@ button {
   font-size: 14px;
   margin: 12px 0;
 }
+
+
+
+
+
+:root {
+  --navbar-height: 58px;
+}
+
+.site-navbar {
+  height: var(--navbar-height);
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 28px;
+  background: #111827;
+  border-bottom: 1px solid #334155;
+  position: relative;
+  z-index: 20;
+}
+
+.site-brand {
+  color: #f8fafc;
+  font-size: 18px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.site-nav-links {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.site-nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 0;
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  border-bottom: none;
+}
+
+.site-nav-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 1px;
+  height: 3px;
+  border-radius: 999px;
+  background-color: transparent;
+}
+
+.site-nav-link.active {
+  color: #ffffff;
+  background: transparent;
+}
+
+.site-nav-link.active::after {
+  background-color: #ffffff;
+}

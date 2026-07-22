@@ -13,6 +13,10 @@ import {
   getAlertCategories,
 } from "../lib/categories";
 
+type MapLibreMapProps = {
+  recentHours?: number;
+};
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -22,7 +26,7 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-export default function MapLibreMap() {
+export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
@@ -40,24 +44,37 @@ export default function MapLibreMap() {
   }, [alerts, selectedCategories]);
 
   useEffect(() => {
+    let cancelled = false;
+  
     async function loadAlerts() {
       try {
         setIsLoading(true);
         setErrorMessage(null);
-
-        const apiAlerts = await fetchAlerts();
-
-        setAlerts(apiAlerts);
+      
+        const apiAlerts = await fetchAlerts(recentHours);
+      
+        if (!cancelled) {
+          setAlerts(apiAlerts);
+        }
       } catch (error) {
-        console.error(error);
-        setErrorMessage("Unable to load alerts from the Flask API.");
+        console.error("Failed to load alerts:", error);
+      
+        if (!cancelled) {
+          setErrorMessage("Unable to load alerts.");
+        }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
-
-    loadAlerts();
-  }, []);
+  
+    void loadAlerts();
+  
+    return () => {
+      cancelled = true;
+    };
+  }, [recentHours]);
 
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;

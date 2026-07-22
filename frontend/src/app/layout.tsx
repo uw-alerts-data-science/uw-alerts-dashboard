@@ -1,8 +1,10 @@
+import type { Metadata } from "next";
+import Navbar from "../components/Navbar";
 import "./globals.css";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "UW Alerts",
-  description: "UW Alerts live map frontend",
+  description: "UW incident and alert dashboard",
 };
 
 export default function RootLayout({
@@ -12,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>{children}</body>
+      <body>
+        <Navbar />
+        <main className="site-main">{children}</main>
+      </body>
     </html>
   );
 }

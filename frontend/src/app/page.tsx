@@ -1,14 +1,6 @@
 import MapLibreMap from "../components/MapLibreMap";
 
-export default function Home() {
-  return (
-    <main className="page">
-      <header className="header">
-        <h1>UW Alerts Live Map</h1>
-        <p>MapLibre frontend container proof of concept</p>
-      </header>
-
-      <MapLibreMap />
-    </main>
-  );
+//Max hours is 168 for testing
+export default function HomePage() {
+  return <MapLibreMap recentHours={6} />;
 }
