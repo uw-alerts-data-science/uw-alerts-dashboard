@@ -27,6 +27,7 @@ dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
     "responses>=0.25",
+    "pre-commit>=3.7",
 ]
 
 [tool.setuptools.packages.find]
@@ -79,12 +80,27 @@ help = "Stop local Postgres container"
 cmd = "docker compose down"
 
 [tool.poe.tasks.setup]
-help = "Spin up postgres, apply schema, and seed from snapshot"
+help = "Spin up postgres, apply schema, seed from snapshot, and install git hooks"
 sequence = [
   { cmd = "docker compose up -d" },
   { script = "scraper.db.wait:wait_for_postgres" },
   { script = "scraper.db.schema:apply_schema" },
   { ref = "db-seed" },
+  { cmd = "pre-commit install" },
+  { cmd = "pre-commit install --hook-type commit-msg" },
+]
+
+[tool.poe.tasks.coverage-check]
+help = "Fail if total coverage drops below the baseline threshold"
+cmd = "coverage report --fail-under=50"
+
+[tool.poe.tasks.all]
+help = "Run the full pre-commit gate: fmt, lint, unit tests, coverage-check"
+sequence = [
+  { ref = "fmt" },
+  { ref = "lint" },
+  { ref = "test" },
+  { ref = "coverage-check" },
 ]
 
 [tool.poe.tasks.dev]

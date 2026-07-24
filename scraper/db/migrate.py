@@ -95,7 +95,11 @@ def seed_if_empty(snapshot_dir: str, conn) -> dict:
         count = cur.fetchone()[0]
     if count > 0:
         print(f"Database already contains {count} incident(s) — skipping seed.")
-        return {"incidents_inserted": 0, "alerts_inserted": 0, "duplicates_skipped": count}
+        return {
+            "incidents_inserted": 0,
+            "alerts_inserted": 0,
+            "duplicates_skipped": count,
+        }
     return seed_from_snapshot(snapshot_dir, conn)
 
 
@@ -123,15 +127,21 @@ def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
     id_map = {}
 
     incident_cols = [
-        "category", "nearest_address", "google_address", "lat", "lng",
-        "occurred_at", "first_reported_at", "last_updated_at",
+        "category",
+        "nearest_address",
+        "google_address",
+        "lat",
+        "lng",
+        "occurred_at",
+        "first_reported_at",
+        "last_updated_at",
     ]
     for _, row in incidents_df.iterrows():
         with conn.cursor() as cur:
             cur.execute(
                 f"""
-                INSERT INTO incidents ({', '.join(incident_cols)})
-                VALUES ({', '.join(['%s'] * len(incident_cols))})
+                INSERT INTO incidents ({", ".join(incident_cols)})
+                VALUES ({", ".join(["%s"] * len(incident_cols))})
                 RETURNING id
                 """,
                 tuple(row.get(c) for c in incident_cols),
@@ -141,8 +151,15 @@ def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
         incidents_inserted += 1
 
     alert_cols = [
-        "incident_id", "alert_type", "reported_at", "incident_time",
-        "summary", "full_text", "raw_scraped_text", "source_url", "text_hash",
+        "incident_id",
+        "alert_type",
+        "reported_at",
+        "incident_time",
+        "summary",
+        "full_text",
+        "raw_scraped_text",
+        "source_url",
+        "text_hash",
     ]
     for _, row in alerts_df.iterrows():
         mapped_incident_id = id_map.get(int(row["incident_id"]))
@@ -156,8 +173,8 @@ def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
                 ]
                 cur.execute(
                     f"""
-                    INSERT INTO alerts ({', '.join(alert_cols)})
-                    VALUES ({', '.join(['%s'] * len(alert_cols))})
+                    INSERT INTO alerts ({", ".join(alert_cols)})
+                    VALUES ({", ".join(["%s"] * len(alert_cols))})
                     """,
                     tuple(values),
                 )

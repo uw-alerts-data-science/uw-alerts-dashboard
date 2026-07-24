@@ -27,7 +27,10 @@ def test_db():
 
 def test_apply_schema_creates_tables(test_db):
     from scraper.db.schema import apply_schema
-    apply_schema(url=os.environ.get("TEST_DATABASE_URL", "postgres://localhost/uw_alerts_test"))
+
+    apply_schema(
+        url=os.environ.get("TEST_DATABASE_URL", "postgres://localhost/uw_alerts_test")
+    )
     with test_db.cursor() as cur:
         cur.execute(
             "SELECT table_name FROM information_schema.tables "
@@ -39,6 +42,7 @@ def test_apply_schema_creates_tables(test_db):
 
 def test_apply_schema_is_idempotent(test_db):
     from scraper.db.schema import apply_schema
+
     url = os.environ.get("TEST_DATABASE_URL", "postgres://localhost/uw_alerts_test")
     # Second call must not raise
     apply_schema(url=url)
