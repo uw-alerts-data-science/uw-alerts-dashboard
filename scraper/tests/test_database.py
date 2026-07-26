@@ -68,6 +68,112 @@ def test_upsert_update_skips_incident_insert():
     assert "last_updated_at" in calls_str
 
 
+def test_upsert_update_coalesces_provided_fields():
+    conn, cur = mock_conn(fetchone=(99,))
+    from scraper.tools.database import upsert_alert
+
+    upsert_alert(
+        conn,
+        {
+            "is_new_incident": False,
+            "incident_id": 5,
+            "alert_type": "update",
+            "full_text": "UPDATE: confirmed as a robbery near HUB Lawn.",
+            "raw_scraped_text": "UPDATE: confirmed as a robbery near HUB Lawn.",
+            "category": "Robbery",
+            "nearest_address": "HUB Lawn",
+            "lat": 47.6553,
+            "lng": -122.3035,
+        },
+    )
+    calls_str = str(cur.execute.call_args_list)
+    assert "COALESCE" in calls_str
+    assert "'Robbery'" in calls_str
+    assert "HUB Lawn" in calls_str
+    assert "47.6553" in calls_str
+
+
+def test_upsert_update_with_no_fields_leaves_params_null():
+    conn, cur = mock_conn(fetchone=(99,))
+    from scraper.tools.database import upsert_alert
+
+    upsert_alert(
+        conn,
+        {
+            "is_new_incident": False,
+            "incident_id": 5,
+            "alert_type": "update",
+            "full_text": "UPDATE: still investigating",
+            "raw_scraped_text": "UPDATE: still investigating",
+        },
+    )
+    incidents_update_call = cur.execute.call_args_list[0]
+    params = incidents_update_call.args[1]
+    assert params == (None, None, None, None, None, None, 5)
+
+
+def test_known_source_urls_returns_subset_present_in_db():
+    conn, cur = mock_conn(fetchall=[("https://emergency.uw.edu/known/",)])
+    from scraper.tools.database import known_source_urls
+
+    result = known_source_urls(
+        conn, ["https://emergency.uw.edu/known/", "https://emergency.uw.edu/new/"]
+    )
+    assert result == {"https://emergency.uw.edu/known/"}
+
+
+def test_known_source_urls_empty_input_returns_empty_set_without_query():
+    conn, cur = mock_conn()
+    from scraper.tools.database import known_source_urls
+
+    result = known_source_urls(conn, [])
+    assert result == set()
+    cur.execute.assert_not_called()
+
+
+def test_find_incident_id_by_source_url_returns_id_when_known():
+    conn, cur = mock_conn(fetchone=(42,))
+    from scraper.tools.database import find_incident_id_by_source_url
+
+    result = find_incident_id_by_source_url(conn, "https://emergency.uw.edu/known/")
+    assert result == 42
+
+
+def test_find_incident_id_by_source_url_returns_none_when_unknown():
+    conn, cur = mock_conn(fetchone=None)
+    from scraper.tools.database import find_incident_id_by_source_url
+
+    result = find_incident_id_by_source_url(conn, "https://emergency.uw.edu/new/")
+    assert result is None
+
+
+def test_get_last_scraped_hash_returns_hash_when_recorded():
+    conn, cur = mock_conn(fetchone=("a" * 64,))
+    from scraper.tools.database import get_last_scraped_hash
+
+    result = get_last_scraped_hash(conn, 42)
+    assert result == "a" * 64
+
+
+def test_get_last_scraped_hash_returns_none_when_never_recorded():
+    conn, cur = mock_conn(fetchone=(None,))
+    from scraper.tools.database import get_last_scraped_hash
+
+    result = get_last_scraped_hash(conn, 42)
+    assert result is None
+
+
+def test_record_scrape_hash_updates_incident_and_commits():
+    conn, cur = mock_conn()
+    from scraper.tools.database import record_scrape_hash
+
+    record_scrape_hash(conn, 42, "b" * 64)
+    calls_str = str(cur.execute.call_args_list)
+    assert "UPDATE incidents SET last_scraped_hash" in calls_str
+    assert ("b" * 64, 42) in [c.args[1] for c in cur.execute.call_args_list]
+    conn.commit.assert_called_once()
+
+
 def test_upsert_computes_correct_text_hash():
     conn, cur = mock_conn(fetchone=(77,))
     from scraper.tools.database import upsert_alert

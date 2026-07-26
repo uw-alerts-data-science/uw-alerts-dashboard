@@ -61,6 +61,62 @@ def test_run_batch_agent_upsert_returns_inserted(mock_get_client, mock_upsert):
     assert mock_upsert.called
 
 
+@patch("scraper.scripts.batch_history.record_scrape_hash")
+@patch(
+    "scraper.scripts.batch_history.upsert_alert",
+    return_value={"status": "inserted", "incident_id": 7, "alert_id": 1},
+)
+@patch("scraper.scripts.batch_history.get_anthropic_client")
+def test_run_batch_agent_records_scrape_hash_for_new_incident(
+    mock_get_client, mock_upsert, mock_record_hash
+):
+    import hashlib
+
+    mock_get_client.return_value.messages.create.side_effect = [
+        _tool_response(
+            "upsert_alert",
+            {
+                "alert_type": "original",
+                "full_text": "Theft near HUB.",
+                "raw_scraped_text": "Theft near HUB.",
+            },
+        ),
+        _end_turn_response(),
+    ]
+    from scraper.scripts.batch_history import run_batch_agent
+
+    conn = MagicMock()
+    run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
+    expected_hash = hashlib.sha256(SAMPLE_ARTICLE["raw_text"].encode()).hexdigest()
+    mock_record_hash.assert_called_once_with(conn, 7, expected_hash)
+
+
+@patch("scraper.scripts.batch_history.record_scrape_hash")
+@patch("scraper.scripts.batch_history.upsert_alert")
+@patch("scraper.scripts.batch_history.get_anthropic_client")
+def test_run_batch_agent_dry_run_does_not_record_scrape_hash(
+    mock_get_client, mock_upsert, mock_record_hash, monkeypatch
+):
+    monkeypatch.setenv("DRY_RUN", "true")
+    mock_upsert.return_value = {"status": "dry_run", "incident_id": 0}
+    mock_get_client.return_value.messages.create.side_effect = [
+        _tool_response(
+            "upsert_alert",
+            {
+                "alert_type": "original",
+                "full_text": "Theft near HUB.",
+                "raw_scraped_text": "Theft near HUB.",
+            },
+        ),
+        _end_turn_response(),
+    ]
+    from scraper.scripts.batch_history import run_batch_agent
+
+    conn = MagicMock()
+    run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
+    mock_record_hash.assert_not_called()
+
+
 @patch("scraper.scripts.batch_history.get_anthropic_client")
 def test_run_batch_agent_end_turn_returns_error(mock_get_client):
     mock_get_client.return_value.messages.create.return_value = _end_turn_response()

@@ -5,38 +5,9 @@ from bs4 import BeautifulSoup
 
 UW_ALERTS_URL = "https://emergency.uw.edu/"
 
-SCRAPE_UW_BLOG_SCHEMA = {
-    "name": "scrape_uw_blog",
-    "description": "Fetch the UW emergency alerts blog. Always call this first.",
-    "input_schema": {"type": "object", "properties": {}, "required": []},
-}
-
 
 class ScrapingError(Exception):
     pass
-
-
-def scrape_uw_blog() -> dict:
-    try:
-        resp = requests.get(UW_ALERTS_URL, timeout=10)
-        resp.raise_for_status()
-    except Exception as e:
-        raise ScrapingError(f"Failed to fetch page: {e}") from e
-
-    soup = BeautifulSoup(resp.text, "html.parser")
-    main = soup.find("main", class_="site-main")
-    if not main:
-        raise ScrapingError("Could not find site-main element on page")
-
-    article = main.find("article")
-    if not article:
-        raise ScrapingError("Could not find any article element on page")
-
-    if not article.find("time", class_="entry-date"):
-        raise ScrapingError("Could not find a date element in article")
-
-    raw_text = article.get_text(separator="\n", strip=True)
-    return {"raw_text": raw_text, "scraped_at": datetime.now(timezone.utc).isoformat()}
 
 
 def scrape_page(page_num: int) -> list:

@@ -50,6 +50,119 @@ def build_upsert_alert_schema(description: str) -> dict:
     }
 
 
+def known_source_urls(conn, urls: list) -> set:
+    """Return the subset of urls already present in alerts.source_url.
+
+    Used by the live agent's page-walk to decide, deterministically and
+    without any LLM judgment, whether a listing page contains only
+    never-before-seen articles (keep expanding the scan) or at least one
+    already-known one (stop expanding).
+
+    Args:
+        conn: A psycopg2 connection.
+        urls: Candidate article URLs to check.
+
+    Returns:
+        The subset of urls found in alerts.source_url (empty set if urls is empty).
+    """
+    if not urls:
+        return set()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT DISTINCT source_url FROM alerts WHERE source_url = ANY(%s)",
+                (urls,),
+            )
+            return {row[0] for row in cur.fetchall()}
+    except psycopg2.Error:
+        conn.rollback()
+        raise
+
+
+def get_last_scraped_hash(conn, incident_id: int) -> str | None:
+    """Return the SHA-256 hash of the raw article text as of the last
+    successful live-agent scrape for this incident.
+
+    Computed and stored directly by Python (see record_scrape_hash) — never
+    passed through the LLM — so the comparison is exact. Comparing against
+    Claude-transcribed raw_scraped_text instead is unreliable: Claude can
+    silently normalize punctuation (e.g. smart quotes to straight quotes)
+    even when explicitly told to copy text verbatim.
+
+    Args:
+        conn: A psycopg2 connection.
+        incident_id: The incident to check.
+
+    Returns:
+        The stored hash, or None if never recorded for this incident.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT last_scraped_hash FROM incidents WHERE id = %s",
+                (incident_id,),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+    except psycopg2.Error:
+        conn.rollback()
+        raise
+
+
+def record_scrape_hash(conn, incident_id: int, text_hash: str) -> None:
+    """Record the SHA-256 hash of the raw article text just processed for
+    this incident, so a future cycle can skip the LLM entirely if the
+    article is still unchanged.
+
+    Args:
+        conn: A psycopg2 connection.
+        incident_id: The incident this scrape belongs to.
+        text_hash: SHA-256 hex digest of the current raw article text.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE incidents SET last_scraped_hash = %s WHERE id = %s",
+                (text_hash, incident_id),
+            )
+        conn.commit()
+    except psycopg2.Error:
+        conn.rollback()
+        raise
+
+
+def find_incident_id_by_source_url(conn, source_url: str) -> int | None:
+    """Deterministically look up the incident_id already associated with a URL.
+
+    Plain SQL, no LLM involved — used to inject a known fact ("this URL
+    already has incident_id=N" or "this URL is unseen") into a live article's
+    initial context, so the agent never has to guess new-vs-existing.
+
+    Args:
+        conn: A psycopg2 connection.
+        source_url: The article URL to look up.
+
+    Returns:
+        The incident_id of the earliest-recorded alert for this source_url,
+        or None if source_url has never been ingested.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT incident_id FROM alerts
+                WHERE source_url = %s
+                ORDER BY created_at ASC LIMIT 1
+                """,
+                (source_url,),
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+    except psycopg2.Error:
+        conn.rollback()
+        raise
+
+
 def query_recent_incidents(conn, limit: int = 10) -> list:
     """Return the most recent incidents as a list of dicts.
 
@@ -96,7 +209,10 @@ def upsert_alert(conn, inputs: dict) -> dict:
 
     When inputs["is_new_incident"] is True, a new row is inserted into
     incidents before the alert row. When False, the existing incident
-    (inputs["incident_id"]) has its last_updated_at timestamp refreshed.
+    (inputs["incident_id"]) is refined: any of category/nearest_address/
+    google_address/lat/lng/occurred_at provided in inputs overwrite the
+    incident's current value (via COALESCE, so omitted/null fields leave
+    the existing value untouched), and last_updated_at is always refreshed.
 
     A SHA-256 hash of full_text is stored in alerts.text_hash. If the hash
     already exists (UniqueViolation), the transaction is rolled back and
@@ -140,8 +256,26 @@ def upsert_alert(conn, inputs: dict) -> dict:
             else:
                 incident_id = validated.incident_id
                 cur.execute(
-                    "UPDATE incidents SET last_updated_at=NOW() WHERE id=%s",
-                    (incident_id,),
+                    """
+                    UPDATE incidents SET
+                        category        = COALESCE(%s, category),
+                        nearest_address = COALESCE(%s, nearest_address),
+                        google_address  = COALESCE(%s, google_address),
+                        lat             = COALESCE(%s, lat),
+                        lng             = COALESCE(%s, lng),
+                        occurred_at     = COALESCE(%s, occurred_at),
+                        last_updated_at = NOW()
+                    WHERE id=%s
+                """,
+                    (
+                        validated.category.value if validated.category else None,
+                        validated.nearest_address,
+                        validated.google_address,
+                        validated.lat,
+                        validated.lng,
+                        validated.occurred_at,
+                        incident_id,
+                    ),
                 )
 
             cur.execute(

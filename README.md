@@ -174,19 +174,20 @@ uv run poe lint          # Lint check
 
 ```
 scraper/
-  agent.py                          # Entry point — Claude tool-use loop
+  agent.py                          # Entry point — delegates to live_discovery
+  live_discovery.py                 # Page-walk discovery + per-article agent loop
   config.py                         # Env var validation
   prompts/                          # Jinja-templated system prompts
     system_prompt.j2
     batch_system_prompt.j2
+    _article_block_parsing.j2       # Shared partial: article structure + field guide
   scripts/
     batch_history.py                # Parallel bulk importer (50 workers)
     audit.py                        # DB audit report
   tools/
     scrape.py                       # Fetch emergency.uw.edu
-    database.py                     # query_recent_incidents, upsert_alert
+    database.py                     # query_recent_incidents, upsert_alert, known_source_urls, find_incident_id_by_source_url
     geocode.py                      # Google Maps geocoding
-    control.py                      # mark_no_update tool schema
   db/
     schema.sql                      # PostgreSQL DDL
     models.py                       # Pydantic contract mirroring schema.sql
