@@ -61,7 +61,7 @@ DRY_RUN=true python -m scraper.agent
 python -m scraper.db.migrate
 ```
 
-CI runs on Python 3.10 and 3.11 using uv. Ruff config is in `pyproject.toml` (`[tool.ruff]`); `E501`, `W291`, `W293` are disabled.
+CI runs on Python 3.12 using uv, matching the production Docker image. Ruff config is in `pyproject.toml` (`[tool.ruff]`); `E501`, `W291`, `W293` are disabled.
 
 ## Architecture
 
