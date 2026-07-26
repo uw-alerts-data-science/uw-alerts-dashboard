@@ -8,6 +8,12 @@ Two-phase parallel approach:
 Every article is treated as a new incident. Safe to re-run — text_hash dedup prevents
 duplicate inserts, and URL pre-filtering skips already-ingested articles.
 
+Also records each incident's raw-text hash (incidents.last_scraped_hash) as it
+processes each article, the same bookkeeping scraper/live_discovery.py relies on
+to skip calling the LLM on an unchanged article. Running this importer first
+means the live agent's very first cycle for each incident is already fast,
+instead of needing to reprocess everything once to bootstrap that hash itself.
+
 Usage:
     python -m scraper.scripts.batch_history
     DRY_RUN=true python -m scraper.scripts.batch_history
@@ -16,6 +22,7 @@ Usage:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -29,7 +36,12 @@ import psycopg2
 from scraper.config import get_anthropic_client, get_model_name, load_config
 from scraper.logging_config import setup_logging
 from scraper.prompts import render_prompt
-from scraper.tools.database import build_upsert_alert_schema, upsert_alert
+from scraper.tools.database import (
+    build_upsert_alert_schema,
+    find_incident_id_by_source_url,
+    record_scrape_hash,
+    upsert_alert,
+)
 from scraper.tools.geocode import build_geocode_address_schema, geocode_address
 from scraper.tools.scrape import scrape_article, scrape_article_urls
 
@@ -192,6 +204,22 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
             status = "inserted"
         else:
             status = "duplicate"
+
+        if not dry:
+            resolved_incident_id = next(
+                (
+                    r.get("incident_id")
+                    for r in upsert_results
+                    if r.get("status") == "inserted"
+                ),
+                None,
+            ) or find_incident_id_by_source_url(db_conn, article.get("article_url", ""))
+            if resolved_incident_id is not None:
+                record_scrape_hash(
+                    db_conn,
+                    resolved_incident_id,
+                    hashlib.sha256(article["raw_text"].encode()).hexdigest(),
+                )
 
         logger.info(
             "article_complete",

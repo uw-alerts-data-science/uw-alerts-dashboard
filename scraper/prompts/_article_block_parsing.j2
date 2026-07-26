@@ -1,0 +1,11 @@
+ARTICLE STRUCTURE:
+Each article is a single incident thread. Updates are posted newest-first; the original report is at the bottom. Updates are labeled "UPDATE at X:" or similar. The original is labeled "ORIGINAL POST:", "ORIGINAL MESSAGE sent at X:", or has just a bare timestamp with no label. The article header shows the publication date — use it to resolve relative timestamps like "10:40 p.m." to full ISO 8601 datetimes.
+
+FIELD EXTRACTION GUIDE (per alert block) — shared across every block:
+- alert_type: "original" for the bottom/first post, "update" for all others
+- reported_at: the timestamp of this specific block (ISO 8601, resolved against the article date)
+- full_text: the text of this specific block only (verbatim)
+- raw_scraped_text: the complete article text (identical for every alert from this article)
+- summary: 1-2 sentence factual summary of this specific block
+- source_url: the article URL provided in the user message (same for every alert)
+- category: one of: {{ category_list }}. Use Announcement for non-emergency informational alerts that do not describe an active incident — operations status/closures, service or system outages (911, IT, network, card access), Indoor Alert system tests, retractions, and general public notices. Use Other only when the alert describes a real incident that doesn't fit any listed category.
