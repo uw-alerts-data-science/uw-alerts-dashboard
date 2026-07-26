@@ -323,3 +323,27 @@ def test_scrape_article_raises_on_missing_article_element():
 
     with pytest.raises(ScrapingError):
         scrape_article(url)
+
+
+@responses.activate
+def test_scrape_article_retries_on_429_then_succeeds():
+    url = "https://emergency.uw.edu/2024/01/theft/"
+    responses.add(responses.GET, url, status=429, headers={"Retry-After": "0"})
+    responses.add(responses.GET, url, body=ARTICLE_HTML, status=200)
+    from scraper.tools.scrape import scrape_article
+
+    result = scrape_article(url, max_retries=1)
+    assert "Theft occurred near HUB" in result["raw_text"]
+    assert len(responses.calls) == 2
+
+
+@responses.activate
+def test_scrape_article_raises_after_max_retries_on_429():
+    url = "https://emergency.uw.edu/2024/01/theft/"
+    responses.add(responses.GET, url, status=429, headers={"Retry-After": "0"})
+    responses.add(responses.GET, url, status=429, headers={"Retry-After": "0"})
+    from scraper.tools.scrape import scrape_article, ScrapingError
+
+    with pytest.raises(ScrapingError, match="429"):
+        scrape_article(url, max_retries=1)
+    assert len(responses.calls) == 2

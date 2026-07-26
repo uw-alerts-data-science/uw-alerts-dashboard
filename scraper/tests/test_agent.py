@@ -105,3 +105,79 @@ def test_azure_model_name_used(mock_get_client, mock_pg):
     run_agent(CONFIG_AZURE)
     call_kwargs = mock_get_client.return_value.messages.create.call_args.kwargs
     assert call_kwargs["model"] == "claude-sonnet-4-5"
+
+
+def _mock_db_conn(fetchone=None):
+    conn = MagicMock()
+    cur = MagicMock()
+    conn.cursor.return_value.__enter__ = MagicMock(return_value=cur)
+    conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
+    cur.fetchone.return_value = fetchone
+    return conn, cur
+
+
+@patch("scraper.agent.psycopg2.connect")
+@patch("scraper.agent.get_anthropic_client")
+def test_new_incident_creates_incident_and_alert_rows(mock_get_client, mock_pg):
+    conn, cur = _mock_db_conn(fetchone=(10,))
+    mock_pg.return_value = conn
+    mock_get_client.return_value.messages.create.return_value = _tool_response(
+        "upsert_alert",
+        {
+            "is_new_incident": True,
+            "alert_type": "original",
+            "full_text": "ORIGINAL POST: Robbery near Red Square.",
+            "raw_scraped_text": "ORIGINAL POST: Robbery near Red Square.",
+            "category": "Robbery",
+        },
+    )
+    from scraper.agent import run_agent
+
+    assert run_agent(CONFIG_DIRECT) == 0
+    calls_str = str(cur.execute.call_args_list)
+    assert "INSERT INTO incidents" in calls_str
+    assert "INSERT INTO alerts" in calls_str
+    assert "Robbery" in calls_str
+
+
+@patch("scraper.agent.psycopg2.connect")
+@patch("scraper.agent.get_anthropic_client")
+def test_update_links_to_existing_incident_id(mock_get_client, mock_pg):
+    conn, cur = _mock_db_conn(fetchone=(500,))
+    mock_pg.return_value = conn
+    mock_get_client.return_value.messages.create.return_value = _tool_response(
+        "upsert_alert",
+        {
+            "is_new_incident": False,
+            "incident_id": 42,
+            "alert_type": "update",
+            "full_text": "UPDATE: scene is secure.",
+            "raw_scraped_text": "UPDATE: scene is secure.",
+        },
+    )
+    from scraper.agent import run_agent
+
+    assert run_agent(CONFIG_DIRECT) == 0
+    calls_str = str(cur.execute.call_args_list)
+    assert "INSERT INTO incidents" not in calls_str
+    assert "UPDATE incidents SET last_updated_at=NOW() WHERE id=%s" in calls_str
+    assert "(42,)" in calls_str
+
+
+@patch("scraper.agent.psycopg2.connect")
+@patch("scraper.agent.get_anthropic_client")
+def test_malformed_upsert_call_missing_full_text_returns_1(mock_get_client, mock_pg):
+    conn, cur = _mock_db_conn(fetchone=(1,))
+    mock_pg.return_value = conn
+    mock_get_client.return_value.messages.create.return_value = _tool_response(
+        "upsert_alert",
+        {
+            "is_new_incident": True,
+            "alert_type": "original",
+            "raw_scraped_text": "missing the required full_text field",
+        },
+    )
+    from scraper.agent import run_agent
+
+    assert run_agent(CONFIG_DIRECT) == 1
+    cur.execute.assert_not_called()

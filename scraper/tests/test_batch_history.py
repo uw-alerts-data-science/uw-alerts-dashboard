@@ -147,7 +147,10 @@ def test_discover_article_urls_returns_flat_list(mock_scrape):
     assert len(urls) == 4  # 2 pages × 2 urls
 
 
-@patch("scraper.scripts.batch_history.scrape_article_urls", side_effect=Exception("timeout"))
+@patch(
+    "scraper.scripts.batch_history.scrape_article_urls",
+    side_effect=Exception("timeout"),
+)
 def test_discover_article_urls_skips_failed_pages(mock_scrape):
     from scraper.scripts.batch_history import _discover_article_urls
 
@@ -197,7 +200,10 @@ def test_process_batch_worker_calls_agent_for_each_url(
     assert all(r["status"] == "inserted" for r in results)
 
 
-@patch("scraper.scripts.batch_history.scrape_article", side_effect=Exception("network error"))
+@patch(
+    "scraper.scripts.batch_history.scrape_article",
+    side_effect=Exception("network error"),
+)
 @patch("scraper.scripts.batch_history.psycopg2.connect")
 def test_process_batch_worker_records_scrape_error(mock_pg, mock_scrape):
     from scraper.scripts.batch_history import _process_batch_worker
@@ -264,7 +270,10 @@ def test_run_batch_returns_0_when_nothing_to_process(mock_pg, mock_discover):
     assert rc == 0
 
 
-@patch("scraper.scripts.batch_history.scrape_article_urls", side_effect=Exception("site down"))
+@patch(
+    "scraper.scripts.batch_history.scrape_article_urls",
+    side_effect=Exception("site down"),
+)
 def test_run_batch_returns_0_when_all_pages_fail_to_scrape(mock_scrape):
     from scraper.scripts.batch_history import run_batch
 
