@@ -5,6 +5,12 @@ from bs4 import BeautifulSoup
 
 UW_ALERTS_URL = "https://emergency.uw.edu/"
 
+SCRAPE_UW_BLOG_SCHEMA = {
+    "name": "scrape_uw_blog",
+    "description": "Fetch the UW emergency alerts blog. Always call this first.",
+    "input_schema": {"type": "object", "properties": {}, "required": []},
+}
+
 
 class ScrapingError(Exception):
     pass

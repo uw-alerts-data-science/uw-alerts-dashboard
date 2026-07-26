@@ -9,10 +9,10 @@ Every article is treated as a new incident. Safe to re-run — text_hash dedup p
 duplicate inserts, and URL pre-filtering skips already-ingested articles.
 
 Usage:
-    python -m scraper.batch_history
-    DRY_RUN=true python -m scraper.batch_history
-    BATCH_WORKERS=50 python -m scraper.batch_history
-    python -m scraper.batch_history --max-pages 30 --workers 20
+    python -m scraper.scripts.batch_history
+    DRY_RUN=true python -m scraper.scripts.batch_history
+    BATCH_WORKERS=50 python -m scraper.scripts.batch_history
+    python -m scraper.scripts.batch_history --max-pages 30 --workers 20
 """
 
 import argparse
@@ -26,14 +26,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import anthropic
 import psycopg2
 
-from scraper.batch_system_prompt import BATCH_SYSTEM_PROMPT
 from scraper.config import get_anthropic_client, get_model_name, load_config
 from scraper.logging_config import setup_logging
-from scraper.tools.database import upsert_alert
-from scraper.tools.geocode import geocode_address
+from scraper.prompts import render_prompt
+from scraper.tools.database import build_upsert_alert_schema, upsert_alert
+from scraper.tools.geocode import build_geocode_address_schema, geocode_address
 from scraper.tools.scrape import scrape_article, scrape_article_urls
 
 logger = setup_logging("scraper.batch")
+
+BATCH_SYSTEM_PROMPT = render_prompt("batch_system_prompt.j2")
 
 DEFAULT_MAX_PAGES = 50
 DEFAULT_PROCESS_WORKERS = 50
@@ -45,49 +47,14 @@ _FETCH_SEMAPHORE = threading.Semaphore(
 )
 
 BATCH_TOOLS = [
-    {
-        "name": "geocode_address",
-        "description": "Geocode a street address or named campus location. Call for every incident that has a location.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"address": {"type": "string"}},
-            "required": ["address"],
-        },
-    },
-    {
-        "name": "upsert_alert",
-        "description": (
-            "Insert one alert into the database. For the original post call with "
-            "is_new_incident=true — the response includes incident_id. For every "
-            "subsequent update call with is_new_incident=false and that incident_id."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "is_new_incident": {"type": "boolean"},
-                "incident_id": {"type": "integer"},
-                "alert_type": {"type": "string", "enum": ["original", "update"]},
-                "category": {"type": "string"},
-                "nearest_address": {"type": "string"},
-                "google_address": {"type": "string"},
-                "lat": {"type": "number"},
-                "lng": {"type": "number"},
-                "occurred_at": {"type": "string"},
-                "reported_at": {"type": "string"},
-                "incident_time": {"type": "string"},
-                "summary": {"type": "string"},
-                "full_text": {"type": "string"},
-                "raw_scraped_text": {"type": "string"},
-                "source_url": {"type": "string"},
-            },
-            "required": [
-                "is_new_incident",
-                "alert_type",
-                "full_text",
-                "raw_scraped_text",
-            ],
-        },
-    },
+    build_geocode_address_schema(
+        "Geocode a street address or named campus location. Call for every incident that has a location."
+    ),
+    build_upsert_alert_schema(
+        "Insert one alert into the database. For the original post call with "
+        "is_new_incident=true — the response includes incident_id. For every "
+        "subsequent update call with is_new_incident=false and that incident_id."
+    ),
 ]
 
 

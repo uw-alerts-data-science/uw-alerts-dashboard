@@ -2,6 +2,8 @@
 import hashlib
 from unittest.mock import MagicMock
 import psycopg2
+import pytest
+from pydantic import ValidationError
 
 
 def mock_conn(fetchall=None, fetchone=None):
@@ -82,6 +84,41 @@ def test_upsert_computes_correct_text_hash():
     )
     expected_hash = hashlib.sha256(text.encode()).hexdigest()
     assert expected_hash in str(cur.execute.call_args_list)
+
+
+def test_upsert_unknown_category_coerced_to_other_in_db():
+    conn, cur = mock_conn(fetchone=(50,))
+    from scraper.tools.database import upsert_alert
+
+    upsert_alert(
+        conn,
+        {
+            "is_new_incident": True,
+            "alert_type": "original",
+            "full_text": "Report of a stabbing near the HUB.",
+            "raw_scraped_text": "Report of a stabbing near the HUB.",
+            "category": "Stabbing",  # not a real category — must coerce, not pass through
+        },
+    )
+    calls_str = str(cur.execute.call_args_list)
+    assert "'Other'" in calls_str
+    assert "Stabbing" not in calls_str
+
+
+def test_upsert_missing_full_text_raises_before_touching_db():
+    conn, cur = mock_conn()
+    from scraper.tools.database import upsert_alert
+
+    with pytest.raises(ValidationError):
+        upsert_alert(
+            conn,
+            {
+                "is_new_incident": True,
+                "alert_type": "original",
+                "raw_scraped_text": "text",
+            },
+        )
+    cur.execute.assert_not_called()
 
 
 def test_upsert_duplicate_hash_returns_duplicate_status():

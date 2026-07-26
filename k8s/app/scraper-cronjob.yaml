@@ -1,12 +1,12 @@
 # The scraper, on a schedule.
 #
-# Why a CronJob? `python -m scraper.scraper_agent` runs once and exits (it checks
+# Why a CronJob? `python -m scraper.agent` runs once and exits (it checks
 # the UW blog, writes any new alerts, then terminates). A CronJob runs that to
 # completion on a schedule. A Deployment would be WRONG — it would keep
 # restarting the finished process forever.
 #
 # We reuse the API image and override the command (same trick as the schema Job).
-# The root Dockerfile bakes the whole repo, so `-m scraper.scraper_agent` works;
+# The root Dockerfile bakes the whole repo, so `-m scraper.agent` works;
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -26,7 +26,7 @@ spec:
           containers:
             - name: scraper
               image: registry.digitalocean.com/uwalerts/api:latest
-              command: ["uv", "run", "python", "-m", "scraper.scraper_agent"]
+              command: ["uv", "run", "python", "-m", "scraper.agent"]
               envFrom:
                 # The scraper needs ALL keys: DATABASE_URL + GOOGLE_MAPS_API_KEY +
                 # ANTHROPIC_API_KEY (or the USE_AZURE + AZURE_* trio).
