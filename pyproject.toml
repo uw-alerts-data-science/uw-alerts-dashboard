@@ -81,11 +81,12 @@ help = "Stop local Postgres container"
 cmd = "docker compose down"
 
 [tool.poe.tasks.setup]
-help = "Spin up postgres, apply schema, and install git hooks (seed disabled — see db-seed)"
+help = "Spin up postgres, apply schema, seed from snapshot, and install git hooks"
 sequence = [
   { cmd = "docker compose up -d" },
   { script = "scraper.db.wait:wait_for_postgres" },
   { script = "scraper.db.schema:apply_schema" },
+  { ref = "db-seed" },
   { cmd = "pre-commit install" },
   { cmd = "pre-commit install --hook-type commit-msg" },
 ]

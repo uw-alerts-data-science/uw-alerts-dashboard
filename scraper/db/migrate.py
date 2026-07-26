@@ -1,8 +1,25 @@
 import ast
 import hashlib
+import math
 import pandas as pd
 import psycopg2
 import psycopg2.errors
+
+
+def _clean(value):
+    """Convert pandas/numpy NaN to None, otherwise pass the value through.
+
+    DataFrame.where(pd.notnull(df), None) looks like it nulls out missing
+    values, but assigning None into a float64/datetime column silently
+    reverts to NaN (numpy arrays can't hold Python None) — so a NaN can
+    still reach psycopg2 as a literal float, which Postgres rejects when
+    the target column is a different type (e.g. TIMESTAMPTZ). Converting
+    at the point of building each row's parameter tuple, on plain Python
+    values rather than DataFrame-stored ones, avoids that silent revert.
+    """
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    return value
 
 
 def migrate_csv(csv_path: str, conn) -> dict:
@@ -116,10 +133,7 @@ def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
     alerts_path = os.path.join(snapshot_dir, "alerts.csv")
 
     incidents_df = pd.read_csv(incidents_path)
-    incidents_df = incidents_df.where(pd.notnull(incidents_df), None)
-
     alerts_df = pd.read_csv(alerts_path)
-    alerts_df = alerts_df.where(pd.notnull(alerts_df), None)
 
     incidents_inserted = 0
     alerts_inserted = 0
@@ -135,6 +149,7 @@ def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
         "occurred_at",
         "first_reported_at",
         "last_updated_at",
+        "last_scraped_hash",
     ]
     for _, row in incidents_df.iterrows():
         with conn.cursor() as cur:
@@ -144,7 +159,7 @@ def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
                 VALUES ({", ".join(["%s"] * len(incident_cols))})
                 RETURNING id
                 """,
-                tuple(row.get(c) for c in incident_cols),
+                tuple(_clean(row.get(c)) for c in incident_cols),
             )
             id_map[int(row["id"])] = cur.fetchone()[0]
         conn.commit()
@@ -168,7 +183,7 @@ def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
         try:
             with conn.cursor() as cur:
                 values = [
-                    mapped_incident_id if c == "incident_id" else row.get(c)
+                    mapped_incident_id if c == "incident_id" else _clean(row.get(c))
                     for c in alert_cols
                 ]
                 cur.execute(
