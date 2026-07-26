@@ -55,7 +55,7 @@ uv run poe fmt            # ruff format + ruff check --fix
 uv run poe lint           # check only, no writes
 
 # Scraper (dry run — no DB writes)
-DRY_RUN=true python -m scraper.scraper_agent
+DRY_RUN=true python -m scraper.agent
 
 # CSV → Postgres migration (one-time)
 python -m scraper.db.migrate
@@ -67,14 +67,21 @@ CI runs on Python 3.10 and 3.11 using uv. Ruff config is in `pyproject.toml` (`[
 
 ```
 scraper/                      # Agentic scraper (runs independently of Flask)
-  scraper_agent.py            # Claude tool-use agent — entry point
+  agent.py                     # Claude tool-use agent — entry point
   config.py                   # Env loading; Anthropic client factory (direct or Azure)
-  system_prompt.py            # Agent system prompt
+  prompts/                    # Jinja-templated system prompts (rendered via render_prompt())
+    system_prompt.j2
+    batch_system_prompt.j2
+  scripts/
+    batch_history.py           # Parallel bulk importer (historical backfill)
+    audit.py                   # DB audit report (record counts, category distribution, data quality)
   tools/
     scrape.py                 # BeautifulSoup fetch of UW Alerts blog
     geocode.py                # Google Maps geocoding
     database.py               # query_recent_incidents, upsert_alert (Postgres)
+    control.py                 # mark_no_update tool schema (agent-loop control)
   db/
+    models.py                  # Pydantic contract mirroring schema.sql (IncidentCategory, AlertType, etc.)
     migrate.py                # One-time CSV → Postgres migration
   tests/                      # pytest-based tests for all scraper modules
 

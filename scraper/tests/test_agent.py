@@ -34,19 +34,19 @@ CONFIG_AZURE = {
 CONFIG = CONFIG_DIRECT
 
 
-@patch("scraper.scraper_agent.psycopg2.connect")
-@patch("scraper.scraper_agent.get_anthropic_client")
+@patch("scraper.agent.psycopg2.connect")
+@patch("scraper.agent.get_anthropic_client")
 def test_exits_0_on_mark_no_update(mock_get_client, mock_pg):
     mock_get_client.return_value.messages.create.return_value = _tool_response(
         "mark_no_update", {"reason": "already in DB"}
     )
-    from scraper.scraper_agent import run_agent
+    from scraper.agent import run_agent
 
     assert run_agent(CONFIG_DIRECT) == 0
 
 
-@patch("scraper.scraper_agent.psycopg2.connect")
-@patch("scraper.scraper_agent.get_anthropic_client")
+@patch("scraper.agent.psycopg2.connect")
+@patch("scraper.agent.get_anthropic_client")
 def test_dry_run_skips_write(mock_get_client, mock_pg, monkeypatch):
     monkeypatch.setenv("DRY_RUN", "true")
     mock_get_client.return_value.messages.create.return_value = _tool_response(
@@ -58,18 +58,18 @@ def test_dry_run_skips_write(mock_get_client, mock_pg, monkeypatch):
             "raw_scraped_text": "test",
         },
     )
-    from scraper.scraper_agent import run_agent
+    from scraper.agent import run_agent
 
     assert run_agent(CONFIG_DIRECT) == 0
 
 
-@patch("scraper.scraper_agent.psycopg2.connect")
-@patch("scraper.scraper_agent.get_anthropic_client")
+@patch("scraper.agent.psycopg2.connect")
+@patch("scraper.agent.get_anthropic_client")
 def test_tools_list_contains_all_five_tools(mock_get_client, mock_pg):
     mock_get_client.return_value.messages.create.return_value = _tool_response(
         "mark_no_update", {"reason": "test"}
     )
-    from scraper.scraper_agent import run_agent, TOOLS
+    from scraper.agent import run_agent, TOOLS
 
     tool_names = {t["name"] for t in TOOLS}
     assert tool_names == {
@@ -82,25 +82,25 @@ def test_tools_list_contains_all_five_tools(mock_get_client, mock_pg):
     run_agent(CONFIG_DIRECT)
 
 
-@patch("scraper.scraper_agent.psycopg2.connect")
-@patch("scraper.scraper_agent.get_anthropic_client")
+@patch("scraper.agent.psycopg2.connect")
+@patch("scraper.agent.get_anthropic_client")
 def test_azure_config_reaches_agent(mock_get_client, mock_pg):
     mock_get_client.return_value.messages.create.return_value = _tool_response(
         "mark_no_update", {"reason": "already in DB"}
     )
-    from scraper.scraper_agent import run_agent
+    from scraper.agent import run_agent
 
     assert run_agent(CONFIG_AZURE) == 0
     mock_get_client.assert_called_once_with(CONFIG_AZURE)
 
 
-@patch("scraper.scraper_agent.psycopg2.connect")
-@patch("scraper.scraper_agent.get_anthropic_client")
+@patch("scraper.agent.psycopg2.connect")
+@patch("scraper.agent.get_anthropic_client")
 def test_azure_model_name_used(mock_get_client, mock_pg):
     mock_get_client.return_value.messages.create.return_value = _tool_response(
         "mark_no_update", {"reason": "done"}
     )
-    from scraper.scraper_agent import run_agent
+    from scraper.agent import run_agent
 
     run_agent(CONFIG_AZURE)
     call_kwargs = mock_get_client.return_value.messages.create.call_args.kwargs

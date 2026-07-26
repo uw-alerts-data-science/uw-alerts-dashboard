@@ -5,7 +5,7 @@ category distribution, update chains, and data quality flags. Exits 0 if all
 hard checks pass, 1 if any FAIL-level issue is found.
 
 Usage:
-    python -m scraper.audit
+    python -m scraper.scripts.audit
 """
 
 import sys
@@ -15,7 +15,7 @@ import psycopg2
 from scraper.config import load_config
 from scraper.logging_config import setup_logging
 
-logger = setup_logging("scraper.audit")
+logger = setup_logging("scraper.scripts.audit")
 
 _SEP = "=" * 62
 _SEC = "-" * 62

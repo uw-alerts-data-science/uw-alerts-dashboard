@@ -8,76 +8,31 @@ import psycopg2
 
 from scraper.config import get_anthropic_client, get_model_name, load_config
 from scraper.logging_config import setup_logging
-from scraper.system_prompt import SYSTEM_PROMPT
-from scraper.tools.scrape import scrape_uw_blog, ScrapingError
-from scraper.tools.database import query_recent_incidents, upsert_alert
-from scraper.tools.geocode import geocode_address
+from scraper.prompts import render_prompt
+from scraper.tools.control import MARK_NO_UPDATE_SCHEMA
+from scraper.tools.scrape import SCRAPE_UW_BLOG_SCHEMA, scrape_uw_blog, ScrapingError
+from scraper.tools.database import (
+    QUERY_RECENT_INCIDENTS_SCHEMA,
+    build_upsert_alert_schema,
+    query_recent_incidents,
+    upsert_alert,
+)
+from scraper.tools.geocode import build_geocode_address_schema, geocode_address
 
 logger = setup_logging()
 
+SYSTEM_PROMPT = render_prompt("system_prompt.j2")
+
 TOOLS = [
-    {
-        "name": "scrape_uw_blog",
-        "description": "Fetch the UW emergency alerts blog. Always call this first.",
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name": "query_recent_incidents",
-        "description": "Get N most recent incidents from DB to detect duplicates and match updates.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"limit": {"type": "integer", "default": 10}},
-            "required": [],
-        },
-    },
-    {
-        "name": "geocode_address",
-        "description": "Geocode a street address. Call only for new incidents.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"address": {"type": "string"}},
-            "required": ["address"],
-        },
-    },
-    {
-        "name": "upsert_alert",
-        "description": "Insert alert. Creates incident+alert rows for new; alert only for updates.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "is_new_incident": {"type": "boolean"},
-                "incident_id": {"type": "integer"},
-                "alert_type": {"type": "string", "enum": ["original", "update"]},
-                "category": {"type": "string"},
-                "nearest_address": {"type": "string"},
-                "google_address": {"type": "string"},
-                "lat": {"type": "number"},
-                "lng": {"type": "number"},
-                "occurred_at": {"type": "string"},
-                "reported_at": {"type": "string"},
-                "incident_time": {"type": "string"},
-                "summary": {"type": "string"},
-                "full_text": {"type": "string"},
-                "raw_scraped_text": {"type": "string"},
-                "source_url": {"type": "string"},
-            },
-            "required": [
-                "is_new_incident",
-                "alert_type",
-                "full_text",
-                "raw_scraped_text",
-            ],
-        },
-    },
-    {
-        "name": "mark_no_update",
-        "description": "Call when scraped content is already in DB. Ends the agent run.",
-        "input_schema": {
-            "type": "object",
-            "properties": {"reason": {"type": "string"}},
-            "required": ["reason"],
-        },
-    },
+    SCRAPE_UW_BLOG_SCHEMA,
+    QUERY_RECENT_INCIDENTS_SCHEMA,
+    build_geocode_address_schema(
+        "Geocode a street address. Call only for new incidents."
+    ),
+    build_upsert_alert_schema(
+        "Insert alert. Creates incident+alert rows for new; alert only for updates."
+    ),
+    MARK_NO_UPDATE_SCHEMA,
 ]
 
 TERMINAL_TOOLS = {"mark_no_update", "upsert_alert"}

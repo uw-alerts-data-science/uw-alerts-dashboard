@@ -4,7 +4,7 @@
 # │  does NOT apply it (it only sweeps k8s/app/ and k8s/db/). Run these by hand.
 # └─ Do NOT `kubectl apply` a generateName resource — it requires `create`.
 #
-# Runs `scraper.batch_history` once to completion — the heavy, parallel scrape
+# Runs `scraper.scripts.batch_history` once to completion — the heavy, parallel scrape
 # of all blog pages. This is the manual "full refresh"; the every-6h incremental
 # run is the separate CronJob (k8s/app/scraper-cronjob.yaml).
 #
@@ -36,7 +36,7 @@ spec:
       containers:
         - name: backfill
           image: registry.digitalocean.com/uwalerts/api:latest
-          command: ["uv", "run", "python", "-m", "scraper.batch_history"]
+          command: ["uv", "run", "python", "-m", "scraper.scripts.batch_history"]
           envFrom:
             - secretRef:
                 name: uwalerts-secrets

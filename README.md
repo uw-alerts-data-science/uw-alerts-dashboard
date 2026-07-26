@@ -174,16 +174,22 @@ uv run poe lint          # Lint check
 
 ```
 scraper/
-  scraper_agent.py                  # Entry point — Claude tool-use loop
-  batch_history.py                  # Parallel bulk importer (50 workers)
-  system_prompt.py                  # Agent system prompt
+  agent.py                          # Entry point — Claude tool-use loop
   config.py                         # Env var validation
+  prompts/                          # Jinja-templated system prompts
+    system_prompt.j2
+    batch_system_prompt.j2
+  scripts/
+    batch_history.py                # Parallel bulk importer (50 workers)
+    audit.py                        # DB audit report
   tools/
     scrape.py                       # Fetch emergency.uw.edu
     database.py                     # query_recent_incidents, upsert_alert
     geocode.py                      # Google Maps geocoding
+    control.py                      # mark_no_update tool schema
   db/
     schema.sql                      # PostgreSQL DDL
+    models.py                       # Pydantic contract mirroring schema.sql
     migrate.py                      # CSV → PostgreSQL migration (one-time)
 
 uw-alert-web/                       # v1 Flask app (being retired)
