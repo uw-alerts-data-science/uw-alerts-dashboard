@@ -21,6 +21,25 @@ type MapLibreMapProps = {
   historicalLayout?: boolean;
 };
 
+const HISTORICAL_CATEGORIES = [
+  "All",
+  "Robbery",
+  "Assault",
+  "Suspicious Activity",
+  "Suspicious Person",
+  "Fire",
+  "Medical Emergency",
+  "Hazardous Materials",
+  "Sexual Assault",
+  "Theft",
+  "Motor Vehicle Incident",
+  "Disturbance",
+  "Other",
+] as const;
+
+type HistoricalCategory =
+  (typeof HISTORICAL_CATEGORIES)[number];
+
 type PopupDetails = {
   coordinates: [number, number];
   title: string;
@@ -54,25 +73,74 @@ export default function MapLibreMap({
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
+  const [historicalCategories, setHistoricalCategories] =
+  useState<string[]>([]);
+
   const categories = useMemo(() => {
     return getAlertCategories(alerts);
   }, [alerts]);
 
+
   const filteredAlerts = useMemo(() => {
+    if (historicalLayout) {
+      if (historicalCategories.length === 0) {
+        return alerts;
+      }
+    
+      return alerts.filter((alert) =>
+        historicalCategories.includes(alert.category)
+      );
+    }
+  
     return alerts.filter((alert) =>
       selectedCategories.includes(alert.category)
     );
-  }, [alerts, selectedCategories]);
+  }, [
+    alerts,
+    selectedCategories,
+    historicalLayout,
+    historicalCategories,
+  ]);
 
-  /*
-   * Load alerts from FastAPI.
-   *
-   * With recentHours:
-   *   /api/alerts?hours=6
-   *
-   * Without recentHours:
-   *   /api/alerts
-   */
+
+
+  const historicalStats = useMemo(() => {
+  const totalIncidents = filteredAlerts.length;
+
+  if (totalIncidents === 0) {
+    return {
+      totalIncidents: 0,
+      mostCommonType: "No data",
+      mostCommonTypeCount: 0,
+    };
+  }
+
+  const categoryCounts = filteredAlerts.reduce<Record<string, number>>(
+      (counts, alert) => {
+        counts[alert.category] = (counts[alert.category] ?? 0) + 1;
+        return counts;
+      },
+      {}
+    );
+
+    const [mostCommonType, mostCommonTypeCount] = Object.entries(
+      categoryCounts
+    ).sort(([categoryA, countA], [categoryB, countB]) => {
+      if (countA !== countB) {
+        return countB - countA;
+      }
+
+      return categoryA.localeCompare(categoryB);
+    })[0];
+
+    return {
+      totalIncidents,
+      mostCommonType,
+      mostCommonTypeCount,
+    };
+  }, [filteredAlerts]);
+
+
   useEffect(() => {
     let cancelled = false;
 
@@ -347,10 +415,7 @@ export default function MapLibreMap({
     };
   }, [historicalLayout]);
 
-  /*
-   * MapLibre needs to be notified whenever its containing card changes size.
-   * This is especially important for the smaller historical map container.
-   */
+
   useEffect(() => {
     const container = mapContainer.current;
 
@@ -475,12 +540,22 @@ export default function MapLibreMap({
     });
   }
 
-  /*
-   * Historical analytics layout.
-   *
-   * This is used only when the historical page passes:
-   * <MapLibreMap historicalLayout />
-   */
+  function toggleHistoricalCategory(category: string) {
+    if (category === "All") {
+      setHistoricalCategories([]);
+      return;
+    }
+
+    setHistoricalCategories((current) => {
+      if (current.includes(category)) {
+        return current.filter((item) => item !== category);
+      }
+
+      return [...current, category];
+    });
+  }
+
+
   if (historicalLayout) {
     return (
       <main className="historical-dashboard">
@@ -507,40 +582,27 @@ export default function MapLibreMap({
             Filters
           </span>
 
-          <button
-            type="button"
-            className="historical-filter-chip active"
-          >
-            Last 90 days
-          </button>
-
-          <button
-            type="button"
-            className="historical-filter-chip"
-          >
-            Robbery
-          </button>
-
-          <button
-            type="button"
-            className="historical-filter-chip"
-          >
-            Assault
-          </button>
-
-          <button
-            type="button"
-            className="historical-filter-chip"
-          >
-            Theft
-          </button>
-
-          <button
-            type="button"
-            className="historical-filter-chip"
-          >
-            Suspicious
-          </button>
+          {HISTORICAL_CATEGORIES.map((category) => {
+            const isAll = category === "All";
+          
+            const isActive = isAll
+              ? historicalCategories.length === 0
+              : historicalCategories.includes(category);
+          
+            return (
+              <button
+                key={category}
+                type="button"
+                className={`historical-filter-chip ${
+                  isActive ? "active" : ""
+                }`}
+                aria-pressed={isActive}
+                onClick={() => toggleHistoricalCategory(category)}
+              >
+                {category}
+              </button>
+            );
+          })}
         </section>
 
         {errorMessage && (
@@ -557,7 +619,15 @@ export default function MapLibreMap({
                 <span>
                   {isLoading
                     ? "Loading incident locations..."
-                    : `${filteredAlerts.length} mapped incidents`}
+                    : historicalCategories.length === 0
+                      ? `${filteredAlerts.length} mapped incidents`
+                      : `${filteredAlerts.length} incidents across ${
+                          historicalCategories.length
+                        } selected ${
+                          historicalCategories.length === 1
+                            ? "category"
+                            : "categories"
+                        }`}
                 </span>
               </div>
             </div>
@@ -572,10 +642,38 @@ export default function MapLibreMap({
             <div className="historical-summary-grid">
               <article className="historical-summary-card">
                 <h2>Total Incidents</h2>
+                                    
+                <strong className="historical-summary-value">
+                  {isLoading ? "—" : historicalStats.totalIncidents}
+                </strong>
+                                    
+                <span className="historical-summary-description">
+                  {historicalCategories.length === 0
+                    ? "Across all categories"
+                    : `Across ${historicalCategories.length} selected ${
+                        historicalCategories.length === 1
+                          ? "category"
+                          : "categories"
+                      }`}
+                </span>
               </article>
-
+                    
               <article className="historical-summary-card">
                 <h2>Most Common Type</h2>
+                    
+                <strong className="historical-summary-value historical-summary-category">
+                  {isLoading ? "—" : historicalStats.mostCommonType}
+                </strong>
+                    
+                <span className="historical-summary-description">
+                  {historicalStats.mostCommonTypeCount > 0
+                    ? `${historicalStats.mostCommonTypeCount} ${
+                        historicalStats.mostCommonTypeCount === 1
+                          ? "incident"
+                          : "incidents"
+                      }`
+                    : "No incidents available"}
+                </span>
               </article>
 
               <article className="historical-summary-card">

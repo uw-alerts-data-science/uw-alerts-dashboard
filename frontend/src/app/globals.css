@@ -722,6 +722,29 @@ button {
   padding: 20px;
 }
 
+.historical-summary-value {
+  display: block;
+  margin-top: 14px;
+
+  color: #d54432;
+  font-size: 30px;
+  font-weight: 750;
+  line-height: 1.05;
+}
+
+.historical-summary-category {
+  color: #253038;
+  font-size: 22px;
+}
+
+.historical-summary-description {
+  display: block;
+  margin-top: 6px;
+
+  color: #737c81;
+  font-size: 11px;
+  line-height: 1.3;
+}
 
 
 
