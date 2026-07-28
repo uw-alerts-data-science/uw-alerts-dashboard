@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import maplibregl, { GeoJSONSource, MapMouseEvent } from "maplibre-gl";
+import maplibregl, {
+  GeoJSONSource,
+  MapMouseEvent,
+} from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import AlertSidebar from "./AlertSidebar";
@@ -15,6 +18,15 @@ import {
 
 type MapLibreMapProps = {
   recentHours?: number;
+  historicalLayout?: boolean;
+};
+
+type PopupDetails = {
+  coordinates: [number, number];
+  title: string;
+  category: string;
+  address: string;
+  reportedAt: string;
 };
 
 function escapeHtml(value: string) {
@@ -26,40 +38,57 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
+export default function MapLibreMap({
+  recentHours,
+  historicalLayout = false,
+}: MapLibreMapProps) {
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const hasInitializedFilters = useRef(false);
 
   const [alerts, setAlerts] = useState<AlertMarker[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const hasInitializedFilters = useRef(false);
+  const categories = useMemo(() => {
+    return getAlertCategories(alerts);
+  }, [alerts]);
 
   const filteredAlerts = useMemo(() => {
-    return alerts.filter((alert) => selectedCategories.includes(alert.category));
+    return alerts.filter((alert) =>
+      selectedCategories.includes(alert.category)
+    );
   }, [alerts, selectedCategories]);
 
+  /*
+   * Load alerts from FastAPI.
+   *
+   * With recentHours:
+   *   /api/alerts?hours=6
+   *
+   * Without recentHours:
+   *   /api/alerts
+   */
   useEffect(() => {
     let cancelled = false;
-  
+
     async function loadAlerts() {
       try {
         setIsLoading(true);
         setErrorMessage(null);
-      
+
         const apiAlerts = await fetchAlerts(recentHours);
-      
+
         if (!cancelled) {
           setAlerts(apiAlerts);
         }
       } catch (error) {
         console.error("Failed to load alerts:", error);
-      
+
         if (!cancelled) {
           setErrorMessage("Unable to load alerts.");
         }
@@ -69,27 +98,52 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
         }
       }
     }
-  
+
     void loadAlerts();
-  
+
     return () => {
       cancelled = true;
     };
   }, [recentHours]);
 
+  /*
+   * Select every category after the API data first loads.
+   */
   useEffect(() => {
-    if (!mapContainer.current || mapRef.current) return;
+    if (hasInitializedFilters.current) {
+      return;
+    }
+
+    if (categories.length === 0) {
+      return;
+    }
+
+    setSelectedCategories(categories);
+    hasInitializedFilters.current = true;
+  }, [categories]);
+
+  /*
+   * Initialize MapLibre.
+   */
+  useEffect(() => {
+    if (!mapContainer.current || mapRef.current) {
+      return;
+    }
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+      style:
+        "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
       center: [-122.3035, 47.6553],
-      zoom: 12,
+      zoom: historicalLayout ? 11.5 : 12,
     });
 
     mapRef.current = map;
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.addControl(
+      new maplibregl.NavigationControl(),
+      "top-right"
+    );
 
     map.on("load", () => {
       map.addSource("alerts", {
@@ -145,26 +199,37 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
           "circle-color": [
             "match",
             ["get", "categoryClass"],
+
             "robbery",
             CATEGORY_COLORS.robbery,
+
             "assault",
             CATEGORY_COLORS.assault,
+
             "suspicious",
             CATEGORY_COLORS.suspicious,
+
             "fire",
             CATEGORY_COLORS.fire,
+
             "medical",
             CATEGORY_COLORS.medical,
+
             "hazmat",
             CATEGORY_COLORS.hazmat,
+
             "sexualAssault",
             CATEGORY_COLORS.sexualAssault,
+
             "theft",
             CATEGORY_COLORS.theft,
+
             "motorVehicle",
             CATEGORY_COLORS.motorVehicle,
+
             "disturbance",
             CATEGORY_COLORS.disturbance,
+
             CATEGORY_COLORS.other,
           ],
           "circle-radius": 10,
@@ -173,49 +238,83 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
         },
       });
 
-      map.on("click", "alert-clusters", async (event: MapMouseEvent) => {
-        const features = map.queryRenderedFeatures(event.point, {
-          layers: ["alert-clusters"],
-        });
+      map.on(
+        "click",
+        "alert-clusters",
+        async (event: MapMouseEvent) => {
+          const features = map.queryRenderedFeatures(
+            event.point,
+            {
+              layers: ["alert-clusters"],
+            }
+          );
 
-        const cluster = features[0];
+          const cluster = features[0];
 
-        if (!cluster || !cluster.properties) return;
+          if (!cluster?.properties) {
+            return;
+          }
 
-        const clusterId = cluster.properties.cluster_id;
-        const source = map.getSource("alerts") as GeoJSONSource;
-        const zoom = await source.getClusterExpansionZoom(clusterId);
+          if (cluster.geometry.type !== "Point") {
+            return;
+          }
 
-        if (cluster.geometry.type !== "Point") return;
+          const clusterId = Number(
+            cluster.properties.cluster_id
+          );
 
-        map.easeTo({
-          center: cluster.geometry.coordinates as [number, number],
-          zoom,
-        });
-      });
+          const source = map.getSource(
+            "alerts"
+          ) as GeoJSONSource;
 
-      map.on("click", "alert-unclustered", (event: MapMouseEvent) => {
-        const features = map.queryRenderedFeatures(event.point, {
-          layers: ["alert-unclustered"],
-        });
+          const zoom =
+            await source.getClusterExpansionZoom(clusterId);
 
-        const feature = features[0];
+          map.easeTo({
+            center: cluster.geometry.coordinates as [
+              number,
+              number,
+            ],
+            zoom,
+          });
+        }
+      );
 
-        if (!feature || feature.geometry.type !== "Point") return;
+      map.on(
+        "click",
+        "alert-unclustered",
+        (event: MapMouseEvent) => {
+          const features = map.queryRenderedFeatures(
+            event.point,
+            {
+              layers: ["alert-unclustered"],
+            }
+          );
 
-        const coordinates = feature.geometry.coordinates as [number, number];
-        const properties = feature.properties;
+          const feature = features[0];
 
-        if (!properties) return;
+          if (!feature || feature.geometry.type !== "Point") {
+            return;
+          }
 
-        openAlertPopup({
-          coordinates,
-          title: String(properties.title),
-          category: String(properties.category),
-          address: String(properties.address),
-          reportedAt: String(properties.reportedAt),
-        });
-      });
+          const properties = feature.properties;
+
+          if (!properties) {
+            return;
+          }
+
+          openAlertPopup({
+            coordinates: feature.geometry.coordinates as [
+              number,
+              number,
+            ],
+            title: String(properties.title),
+            category: String(properties.category),
+            address: String(properties.address),
+            reportedAt: String(properties.reportedAt),
+          });
+        }
+      );
 
       map.on("mouseenter", "alert-clusters", () => {
         map.getCanvas().style.cursor = "pointer";
@@ -241,22 +340,57 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
       popupRef.current?.remove();
       popupRef.current = null;
 
-      mapRef.current?.remove();
+      map.remove();
       mapRef.current = null;
 
       setIsMapLoaded(false);
-
     };
-  }, []);
+  }, [historicalLayout]);
 
+  /*
+   * MapLibre needs to be notified whenever its containing card changes size.
+   * This is especially important for the smaller historical map container.
+   */
+  useEffect(() => {
+    const container = mapContainer.current;
+
+    if (!container) {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      mapRef.current?.resize();
+    });
+
+    resizeObserver.observe(container);
+
+    const initialResize = window.setTimeout(() => {
+      mapRef.current?.resize();
+    }, 100);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.clearTimeout(initialResize);
+    };
+  }, [historicalLayout]);
+
+  /*
+   * Update the GeoJSON source when alerts or filters change.
+   */
   useEffect(() => {
     const map = mapRef.current;
 
-    if (!map || !isMapLoaded) return;
+    if (!map || !isMapLoaded) {
+      return;
+    }
 
-    const source = map.getSource("alerts") as GeoJSONSource | undefined;
+    const source = map.getSource(
+      "alerts"
+    ) as GeoJSONSource | undefined;
 
-    if (!source) return;
+    if (!source) {
+      return;
+    }
 
     popupRef.current?.remove();
     popupRef.current = null;
@@ -270,20 +404,18 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
     category,
     address,
     reportedAt,
-  }: {
-    coordinates: [number, number];
-    title: string;
-    category: string;
-    address: string;
-    reportedAt: string;
-  }) {
+  }: PopupDetails) {
     const map = mapRef.current;
 
-    if (!map) return;
+    if (!map) {
+      return;
+    }
 
     popupRef.current?.remove();
 
-    popupRef.current = new maplibregl.Popup({ offset: 18 })
+    popupRef.current = new maplibregl.Popup({
+      offset: 18,
+    })
       .setLngLat(coordinates)
       .setHTML(`
         <div class="popup-content">
@@ -296,23 +428,21 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
       .addTo(map);
   }
 
-  const categories = useMemo(() => {
-    return getAlertCategories(alerts);                    ////////////////////////////////////
-  }, [alerts]);
-  useEffect(() => {
-    if (hasInitializedFilters.current) return;
-    if (categories.length === 0) return;
-    setSelectedCategories(categories);
-    hasInitializedFilters.current = true;
-  }, [categories]);
-
   function zoomToAlert(alertId: number) {
-    const alert = filteredAlerts.find((item) => item.id === alertId);
+    const alert = filteredAlerts.find(
+      (item) => item.id === alertId
+    );
+
     const map = mapRef.current;
 
-    if (!alert || !map) return;
+    if (!alert || !map) {
+      return;
+    }
 
-    const coordinates: [number, number] = [alert.longitude, alert.latitude];
+    const coordinates: [number, number] = [
+      alert.longitude,
+      alert.latitude,
+    ];
 
     map.flyTo({
       center: coordinates,
@@ -336,13 +466,149 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
   function toggleCategory(category: string) {
     setSelectedCategories((current) => {
       if (current.includes(category)) {
-        return current.filter((item) => item !== category);
+        return current.filter(
+          (item) => item !== category
+        );
       }
 
       return [...current, category];
     });
   }
 
+  /*
+   * Historical analytics layout.
+   *
+   * This is used only when the historical page passes:
+   * <MapLibreMap historicalLayout />
+   */
+  if (historicalLayout) {
+    return (
+      <main className="historical-dashboard">
+        <header className="historical-dashboard-header">
+          <div>
+            <h1>Incident Analytics</h1>
+            <p>
+              Aggregated, de-identified trends from published
+              alerts
+            </p>
+          </div>
+
+          <button
+            type="button"
+            className="historical-period-button"
+          >
+            This year
+            <span aria-hidden="true">⌄</span>
+          </button>
+        </header>
+
+        <section className="historical-filter-bar">
+          <span className="historical-filter-label">
+            Filters
+          </span>
+
+          <button
+            type="button"
+            className="historical-filter-chip active"
+          >
+            Last 90 days
+          </button>
+
+          <button
+            type="button"
+            className="historical-filter-chip"
+          >
+            Robbery
+          </button>
+
+          <button
+            type="button"
+            className="historical-filter-chip"
+          >
+            Assault
+          </button>
+
+          <button
+            type="button"
+            className="historical-filter-chip"
+          >
+            Theft
+          </button>
+
+          <button
+            type="button"
+            className="historical-filter-chip"
+          >
+            Suspicious
+          </button>
+        </section>
+
+        {errorMessage && (
+          <p className="historical-error-message">
+            {errorMessage}
+          </p>
+        )}
+
+        <div className="historical-dashboard-grid">
+          <section className="historical-panel historical-map-panel">
+            <div className="historical-panel-heading">
+              <div>
+                <h2>Incident Map</h2>
+                <span>
+                  {isLoading
+                    ? "Loading incident locations..."
+                    : `${filteredAlerts.length} mapped incidents`}
+                </span>
+              </div>
+            </div>
+
+            <div
+              ref={mapContainer}
+              className="historical-map-container"
+            />
+          </section>
+
+          <section className="historical-analytics-content">
+            <div className="historical-summary-grid">
+              <article className="historical-summary-card">
+                <h2>Total Incidents</h2>
+              </article>
+
+              <article className="historical-summary-card">
+                <h2>Most Common Type</h2>
+              </article>
+
+              <article className="historical-summary-card">
+                <h2>Most Common Area</h2>
+              </article>
+
+              <article className="historical-summary-card">
+                <h2>Peak Hour</h2>
+              </article>
+            </div>
+
+            <article className="historical-panel historical-wide-chart">
+              <h2>Incidents Over Time</h2>
+            </article>
+
+            <div className="historical-bottom-grid">
+              <article className="historical-panel historical-chart-card">
+                <h2>Incidents by Type</h2>
+              </article>
+
+              <article className="historical-panel historical-chart-card">
+                <h2>Incidents by Day of Week</h2>
+              </article>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
+  /*
+   * Existing Recent Alerts layout.
+   */
   return (
     <div className="map-layout">
       <button
@@ -354,7 +620,7 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
       >
         Alerts & Filters
       </button>
-  
+
       {isSidebarOpen && (
         <button
           type="button"
@@ -363,7 +629,7 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
-  
+
       <div
         id="alert-sidebar-panel"
         className={`sidebar-panel ${
@@ -378,7 +644,7 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
         >
           ×
         </button>
-      
+
         <AlertSidebar
           alerts={filteredAlerts}
           categories={categories}
@@ -392,8 +658,11 @@ export default function MapLibreMap({ recentHours,}: MapLibreMapProps) {
           errorMessage={errorMessage}
         />
       </div>
-        
-      <div ref={mapContainer} className="map-container" />
+
+      <div
+        ref={mapContainer}
+        className="map-container"
+      />
     </div>
   );
 }
