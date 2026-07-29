@@ -119,10 +119,8 @@ export default function MapLibreMap({
   const mapContainer = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
-  const hasInitializedFilters = useRef(false);
 
   const [alerts, setAlerts] = useState<AlertMarker[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -137,9 +135,6 @@ export default function MapLibreMap({
   const [historicalTimeRange, setHistoricalTimeRange] =
   useState<HistoricalTimeRange>("all");
 
-  const categories = useMemo(() => {
-    return getAlertCategories(alerts);
-  }, [alerts]);
 
   const pacificHourFormatter = new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
@@ -188,23 +183,26 @@ export default function MapLibreMap({
 
   const filteredAlerts = useMemo(() => {
     if (historicalLayout) {
+      const timeFilteredAlerts =
+        historicalTimeRange === "all"
+          ? alerts
+          : historicalTimeFilteredAlerts;
+
       if (historicalCategories.length === 0) {
-        return historicalTimeFilteredAlerts;
+        return timeFilteredAlerts;
       }
 
-      return historicalTimeFilteredAlerts.filter((alert) =>
+      return timeFilteredAlerts.filter((alert) =>
         historicalCategories.includes(alert.category)
       );
     }
-
-    return alerts.filter((alert) =>
-      selectedCategories.includes(alert.category)
-    );
+    // Live page shows every incident returned by the recent-hours API.
+    return alerts;
   }, [
     alerts,
-    selectedCategories,
     historicalLayout,
     historicalCategories,
+    historicalTimeRange,
     historicalTimeFilteredAlerts,
   ]);
 
@@ -579,25 +577,8 @@ export default function MapLibreMap({
     };
   }, [recentHours]);
 
-  /*
-   * Select every category after the API data first loads.
-   */
-  useEffect(() => {
-    if (hasInitializedFilters.current) {
-      return;
-    }
 
-    if (categories.length === 0) {
-      return;
-    }
 
-    setSelectedCategories(categories);
-    hasInitializedFilters.current = true;
-  }, [categories]);
-
-  /*
-   * Initialize MapLibre.
-   */
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) {
       return;
@@ -933,17 +914,7 @@ export default function MapLibreMap({
     });
   }
 
-  function toggleCategory(category: string) {
-    setSelectedCategories((current) => {
-      if (current.includes(category)) {
-        return current.filter(
-          (item) => item !== category
-        );
-      }
 
-      return [...current, category];
-    });
-  }
 
   function toggleHistoricalCategory(category: string) {
     if (category === "All") {
@@ -977,7 +948,7 @@ export default function MapLibreMap({
             <span className="historical-visually-hidden">
               Historical time range
             </span>
-                      
+
             <select
               value={historicalTimeRange}
               onChange={(event) =>
@@ -1412,7 +1383,7 @@ export default function MapLibreMap({
         aria-expanded={isSidebarOpen}
         aria-controls="alert-sidebar-panel"
       >
-        Alerts & Filters
+        Alerts
       </button>
 
       {isSidebarOpen && (
@@ -1441,9 +1412,6 @@ export default function MapLibreMap({
 
         <AlertSidebar
           alerts={filteredAlerts}
-          categories={categories}
-          selectedCategories={selectedCategories}
-          onToggleCategory={toggleCategory}
           onAlertClick={(alertId) => {
             zoomToAlert(alertId);
             setIsSidebarOpen(false);
