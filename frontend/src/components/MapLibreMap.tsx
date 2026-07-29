@@ -14,12 +14,32 @@ import { buildAlertsGeoJson } from "../lib/alertMapData";
 import {
   CATEGORY_COLORS,
   getAlertCategories,
+  getCategoryClass,
 } from "../lib/categories";
 
 type MapLibreMapProps = {
   recentHours?: number;
   historicalLayout?: boolean;
 };
+
+
+const HISTORICAL_WEEKDAYS = [
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+  "Sun",
+] as const;
+
+type HistoricalWeekday =
+  (typeof HISTORICAL_WEEKDAYS)[number];
+
+const weekdayFormatter = new Intl.DateTimeFormat("en-US", {
+  weekday: "short",
+  timeZone: "America/Los_Angeles",
+});
 
 const HISTORICAL_CATEGORIES = [
   "All",
@@ -80,6 +100,18 @@ export default function MapLibreMap({
     return getAlertCategories(alerts);
   }, [alerts]);
 
+  const pacificHourFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  hourCycle: "h23",
+  timeZone: "America/Los_Angeles",
+});
+
+function formatHourLabel(hour: number) {
+  const displayHour = hour % 12 || 12;
+  const suffix = hour < 12 ? "AM" : "PM";
+
+  return `${displayHour} ${suffix}`;
+}
 
   const filteredAlerts = useMemo(() => {
     if (historicalLayout) {
@@ -139,6 +171,168 @@ export default function MapLibreMap({
       mostCommonTypeCount,
     };
   }, [filteredAlerts]);
+
+  const historicalCategoryCounts = useMemo(() => {
+    const total = filteredAlerts.length;
+
+    if (total === 0) {
+      return [];
+    }
+
+    const counts = filteredAlerts.reduce<Record<string, number>>(
+      (result, alert) => {
+        result[alert.category] =
+          (result[alert.category] ?? 0) + 1;
+
+        return result;
+      },
+      {}
+    );
+
+    return Object.entries(counts)
+      .map(([category, count]) => ({
+        category,
+        count,
+        percentage: Math.round((count / total) * 100),
+      }))
+      .sort((a, b) => {
+        if (a.count !== b.count) {
+          return b.count - a.count;
+        }
+
+        return a.category.localeCompare(b.category);
+      });
+  }, [filteredAlerts]);
+
+
+  const historicalWeekdayStats = useMemo(() => {
+    const counts: Record<HistoricalWeekday, number> = {
+      Mon: 0,
+      Tue: 0,
+      Wed: 0,
+      Thu: 0,
+      Fri: 0,
+      Sat: 0,
+      Sun: 0,
+    };
+
+    let unavailableDateCount = 0;
+
+    for (const alert of filteredAlerts) {
+      if (!alert.reportedAt) {
+        unavailableDateCount += 1;
+        continue;
+      }
+
+      const reportedDate = new Date(alert.reportedAt);
+
+      if (Number.isNaN(reportedDate.getTime())) {
+        unavailableDateCount += 1;
+        continue;
+      }
+
+      const weekday = weekdayFormatter.format(
+        reportedDate
+      ) as HistoricalWeekday;
+
+      if (weekday in counts) {
+        counts[weekday] += 1;
+      } else {
+        unavailableDateCount += 1;
+      }
+    }
+
+    const days = HISTORICAL_WEEKDAYS.map((day) => ({
+      day,
+      count: counts[day],
+    }));
+
+    const maxCount = Math.max(
+      1,
+      ...days.map((item) => item.count)
+    );
+
+    const totalWithDates = days.reduce(
+      (total, item) => total + item.count,
+      0
+    );
+
+    return {
+      days,
+      maxCount,
+      totalWithDates,
+      unavailableDateCount,
+    };
+  }, [filteredAlerts]);
+
+  const historicalPeakHourStats = useMemo(() => {
+    const hourCounts = Array.from({ length: 24 }, () => 0);
+
+    let incidentsWithValidTimes = 0;
+    let unavailableTimeCount = 0;
+
+    for (const alert of filteredAlerts) {
+      if (!alert.reportedAt) {
+        unavailableTimeCount += 1;
+        continue;
+      }
+
+      const reportedDate = new Date(alert.reportedAt);
+
+      if (Number.isNaN(reportedDate.getTime())) {
+        unavailableTimeCount += 1;
+        continue;
+      }
+
+      const hourPart = pacificHourFormatter
+        .formatToParts(reportedDate)
+        .find((part) => part.type === "hour");
+
+      const hour = Number(hourPart?.value);
+
+      if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+        unavailableTimeCount += 1;
+        continue;
+      }
+
+      hourCounts[hour] += 1;
+      incidentsWithValidTimes += 1;
+    }
+
+    if (incidentsWithValidTimes === 0) {
+      return {
+        hour: null,
+        label: "No data",
+        count: 0,
+        percentage: 0,
+        unavailableTimeCount,
+      };
+    }
+
+    let peakHour = 0;
+    let peakCount = hourCounts[0];
+
+    for (let hour = 1; hour < hourCounts.length; hour += 1) {
+      if (hourCounts[hour] > peakCount) {
+        peakHour = hour;
+        peakCount = hourCounts[hour];
+      }
+    }
+
+    return {
+      hour: peakHour,
+      label: formatHourLabel(peakHour),
+      count: peakCount,
+      percentage: Math.round(
+        (peakCount / incidentsWithValidTimes) * 100
+      ),
+      unavailableTimeCount,
+    };
+  }, [filteredAlerts]);
+
+
+
+
 
 
   useEffect(() => {
@@ -679,9 +873,26 @@ export default function MapLibreMap({
               <article className="historical-summary-card">
                 <h2>Most Common Area</h2>
               </article>
-
               <article className="historical-summary-card">
                 <h2>Peak Hour</h2>
+
+                <strong className="historical-summary-value historical-summary-category">
+                  {isLoading ? "—" : historicalPeakHourStats.label}
+                </strong>
+
+                <span className="historical-summary-description">
+                  {historicalPeakHourStats.count > 0
+                    ? `${historicalPeakHourStats.count} incidents · ${
+                        historicalPeakHourStats.percentage
+                      }% of incidents`
+                    : "No valid incident times available"}
+                </span>
+                    
+                {historicalPeakHourStats.count > 0 && (
+                  <span className="historical-summary-description">
+                    Pacific Time
+                  </span>
+                )}
               </article>
             </div>
 
@@ -692,10 +903,121 @@ export default function MapLibreMap({
             <div className="historical-bottom-grid">
               <article className="historical-panel historical-chart-card">
                 <h2>Incidents by Type</h2>
-              </article>
 
+                {isLoading ? (
+                  <p className="historical-chart-empty">
+                    Loading incident data...
+                  </p>
+                ) : historicalCategoryCounts.length === 0 ? (
+                  <p className="historical-chart-empty">
+                    No incident data available.
+                  </p>
+                ) : (
+                  <div className="historical-type-list">
+                    {historicalCategoryCounts.map((item) => {
+                      const categoryClass = getCategoryClass(item.category);
+                    
+                      const barColor =
+                        CATEGORY_COLORS[
+                          categoryClass as keyof typeof CATEGORY_COLORS
+                        ] ?? CATEGORY_COLORS.other;
+                      
+                      return (
+                        <div
+                          key={item.category}
+                          className="historical-type-row"
+                        >
+                          <div className="historical-type-header">
+                            <span className="historical-type-name">
+                              {item.category}
+                            </span>
+                      
+                            <span className="historical-type-count">
+                              {item.count}
+                            </span>
+                      
+                            <span className="historical-type-percentage">
+                              {item.percentage}%
+                            </span>
+                          </div>
+                      
+                          <div className="historical-type-track">
+                            <div
+                              className="historical-type-bar"
+                              style={{
+                                width: `${item.percentage}%`,
+                                backgroundColor: barColor,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </article>
               <article className="historical-panel historical-chart-card">
                 <h2>Incidents by Day of Week</h2>
+
+                {isLoading ? (
+                  <p className="historical-chart-empty">
+                    Loading incident data...
+                  </p>
+                ) : historicalWeekdayStats.totalWithDates === 0 ? (
+                  <p className="historical-chart-empty">
+                    No incidents with valid date information.
+                  </p>
+                ) : (
+                  <>
+                    <div className="historical-weekday-chart">
+                      {historicalWeekdayStats.days.map((item) => {
+                        const heightPercentage =
+                          item.count === 0
+                            ? 0
+                            : Math.max(
+                                8,
+                                (item.count /
+                                  historicalWeekdayStats.maxCount) *
+                                  100
+                              );
+                            
+                        return (
+                          <div
+                            key={item.day}
+                            className="historical-weekday-column"
+                          >
+                            <span className="historical-weekday-count">
+                              {item.count}
+                            </span>
+                        
+                            <div className="historical-weekday-track">
+                              <div
+                                className="historical-weekday-bar"
+                                style={{
+                                  height: `${heightPercentage}%`,
+                                }}
+                              />
+                            </div>
+                              
+                            <span className="historical-weekday-label">
+                              {item.day}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    
+                    <p className="historical-weekday-note">
+                      Incident counts by reported weekday in Pacific Time.
+                      {historicalWeekdayStats.unavailableDateCount > 0 &&
+                        ` ${historicalWeekdayStats.unavailableDateCount} incident${
+                          historicalWeekdayStats.unavailableDateCount === 1
+                            ? " was"
+                            : "s were"
+                        } excluded because no valid date was available.`}
+                    </p>
+                  </>
+                )}
               </article>
             </div>
           </section>
