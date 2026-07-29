@@ -945,6 +945,23 @@ button {
   border: 0;
 }
 
+.historical-period-control select {
+  min-height: 38px;
+  padding: 0 34px 0 14px;
+
+  color: #172026;
+  background: #ffffff;
+
+  border: 1px solid #d4d9d6;
+  border-radius: 999px;
+
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
 
 
 /* Mobile layout */
@@ -1177,17 +1194,17 @@ button {
   .historical-chart-heading {
     align-items: center;
   }
-  
+
   .historical-chart-heading > div > span {
     display: none;
   }
-  
+
   .historical-chart-selector select {
     max-width: 145px;
     padding-left: 10px;
     font-size: 11px;
   }
-  
+
   .historical-timeline-chart {
     height: 210px;
   }

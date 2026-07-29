@@ -33,6 +33,7 @@ type MapLibreMapProps = {
   historicalLayout?: boolean;
 };
 
+type HistoricalTimeRange = "all" | "year" | "month";
 
 const HISTORICAL_WEEKDAYS = [
   "Mon",
@@ -133,34 +134,69 @@ export default function MapLibreMap({
   const [historicalTimelineMode, setHistoricalTimelineMode] =
   useState<HistoricalTimelineMode>("monthly");
 
+  const [historicalTimeRange, setHistoricalTimeRange] =
+  useState<HistoricalTimeRange>("all");
+
   const categories = useMemo(() => {
     return getAlertCategories(alerts);
   }, [alerts]);
 
   const pacificHourFormatter = new Intl.DateTimeFormat("en-US", {
-  hour: "2-digit",
-  hourCycle: "h23",
-  timeZone: "America/Los_Angeles",
-});
+    hour: "2-digit",
+    hourCycle: "h23",
+    timeZone: "America/Los_Angeles",
+  });
 
-function formatHourLabel(hour: number) {
-  const displayHour = hour % 12 || 12;
-  const suffix = hour < 12 ? "AM" : "PM";
+  function formatHourLabel(hour: number) {
+    const displayHour = hour % 12 || 12;
+    const suffix = hour < 12 ? "AM" : "PM";
 
-  return `${displayHour} ${suffix}`;
-}
+    return `${displayHour} ${suffix}`;
+  }
+
+  const historicalTimeFilteredAlerts = useMemo(() => {
+    if (!historicalLayout || historicalTimeRange === "all") {
+      return alerts;
+    }
+
+    const now = new Date();
+    const cutoffDate = new Date(now);
+
+    if (historicalTimeRange === "year") {
+      cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
+    }
+
+    if (historicalTimeRange === "month") {
+      cutoffDate.setMonth(cutoffDate.getMonth() - 1);
+    }
+
+    return alerts.filter((alert) => {
+      if (!alert.reportedAt) {
+        return false;
+      }
+
+      const reportedDate = new Date(alert.reportedAt);
+
+      if (Number.isNaN(reportedDate.getTime())) {
+        return false;
+      }
+
+      return reportedDate >= cutoffDate && reportedDate <= now;
+    });
+  }, [alerts, historicalLayout, historicalTimeRange]);
+
 
   const filteredAlerts = useMemo(() => {
     if (historicalLayout) {
       if (historicalCategories.length === 0) {
-        return alerts;
+        return historicalTimeFilteredAlerts;
       }
-    
-      return alerts.filter((alert) =>
+
+      return historicalTimeFilteredAlerts.filter((alert) =>
         historicalCategories.includes(alert.category)
       );
     }
-  
+
     return alerts.filter((alert) =>
       selectedCategories.includes(alert.category)
     );
@@ -169,7 +205,9 @@ function formatHourLabel(hour: number) {
     selectedCategories,
     historicalLayout,
     historicalCategories,
+    historicalTimeFilteredAlerts,
   ]);
+
 
 
 
@@ -935,13 +973,24 @@ function formatHourLabel(hour: number) {
             </p> */}
           </div>
 
-          {/* <button
-            type="button"
-            className="historical-period-button"
-          >
-            This year
-            <span aria-hidden="true">⌄</span>
-          </button> */}
+          <label className="historical-period-control">
+            <span className="historical-visually-hidden">
+              Historical time range
+            </span>
+                      
+            <select
+              value={historicalTimeRange}
+              onChange={(event) =>
+                setHistoricalTimeRange(
+                  event.target.value as HistoricalTimeRange
+                )
+              }
+            >
+              <option value="all">All Time</option>
+              <option value="year">Last Year</option>
+              <option value="month">Last Month</option>
+            </select>
+          </label>
         </header>
 
         <section className="historical-filter-bar">
