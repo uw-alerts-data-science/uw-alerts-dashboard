@@ -891,7 +891,59 @@ button {
 }
 
 
+.historical-chart-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
 
+.historical-chart-heading h2 {
+  margin: 0 0 4px;
+}
+
+.historical-chart-heading > div > span {
+  color: #778086;
+  font-size: 11px;
+}
+
+.historical-chart-selector select {
+  min-height: 34px;
+  padding: 0 32px 0 12px;
+
+  color: #263238;
+  background: #ffffff;
+
+  border: 1px solid #d4d9d6;
+  border-radius: 999px;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+
+  cursor: pointer;
+}
+
+.historical-timeline-chart {
+  width: 100%;
+  height: 235px;
+  margin-top: 14px;
+}
+
+.historical-visually-hidden {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+
+  border: 0;
+}
 
 
 
@@ -1120,6 +1172,24 @@ button {
   .historical-weekday-label,
   .historical-weekday-count {
     font-size: 10px;
+  }
+
+  .historical-chart-heading {
+    align-items: center;
+  }
+  
+  .historical-chart-heading > div > span {
+    display: none;
+  }
+  
+  .historical-chart-selector select {
+    max-width: 145px;
+    padding-left: 10px;
+    font-size: 11px;
+  }
+  
+  .historical-timeline-chart {
+    height: 210px;
   }
 }
 

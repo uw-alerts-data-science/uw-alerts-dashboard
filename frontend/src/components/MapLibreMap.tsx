@@ -17,6 +17,17 @@ import {
   getCategoryClass,
 } from "../lib/categories";
 
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
 type MapLibreMapProps = {
   recentHours?: number;
   historicalLayout?: boolean;
@@ -57,6 +68,29 @@ const HISTORICAL_CATEGORIES = [
   "Other",
 ] as const;
 
+type HistoricalTimelineMode = "monthly" | "yearly";
+
+type HistoricalTimelinePoint = {
+  key: string;
+  label: string;
+  count: number;
+};
+
+const FIRST_HISTORICAL_YEAR = 2018;
+
+const pacificYearMonthFormatter = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "2-digit",
+  timeZone: "America/Los_Angeles",
+});
+
+const monthAxisFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  year: "2-digit",
+  timeZone: "UTC",
+});
+
+
 type HistoricalCategory =
   (typeof HISTORICAL_CATEGORIES)[number];
 
@@ -95,6 +129,9 @@ export default function MapLibreMap({
 
   const [historicalCategories, setHistoricalCategories] =
   useState<string[]>([]);
+
+  const [historicalTimelineMode, setHistoricalTimelineMode] =
+  useState<HistoricalTimelineMode>("monthly");
 
   const categories = useMemo(() => {
     return getAlertCategories(alerts);
@@ -330,6 +367,142 @@ function formatHourLabel(hour: number) {
     };
   }, [filteredAlerts]);
 
+
+  const historicalTimelineData = useMemo<HistoricalTimelinePoint[]>(() => {
+    const nowParts = pacificYearMonthFormatter.formatToParts(new Date());
+
+    const currentYear = Number(
+      nowParts.find((part) => part.type === "year")?.value
+    );
+
+    const currentMonth = Number(
+      nowParts.find((part) => part.type === "month")?.value
+    );
+
+    if (
+      !Number.isInteger(currentYear) ||
+      !Number.isInteger(currentMonth)
+    ) {
+      return [];
+    }
+
+    const incidentDateParts = filteredAlerts.flatMap((alert) => {
+      if (!alert.reportedAt) {
+        return [];
+      }
+
+      const date = new Date(alert.reportedAt);
+
+      if (Number.isNaN(date.getTime())) {
+        return [];
+      }
+
+      const parts = pacificYearMonthFormatter.formatToParts(date);
+
+      const year = Number(
+        parts.find((part) => part.type === "year")?.value
+      );
+
+      const month = Number(
+        parts.find((part) => part.type === "month")?.value
+      );
+
+      if (!Number.isInteger(year) || !Number.isInteger(month)) {
+        return [];
+      }
+
+      return [{ year, month }];
+    });
+
+    if (historicalTimelineMode === "yearly") {
+      const countsByYear = new Map<number, number>();
+
+      for (
+        let year = FIRST_HISTORICAL_YEAR;
+        year <= currentYear;
+        year += 1
+      ) {
+        countsByYear.set(year, 0);
+      }
+
+      for (const incident of incidentDateParts) {
+        if (
+          incident.year >= FIRST_HISTORICAL_YEAR &&
+          incident.year <= currentYear
+        ) {
+          countsByYear.set(
+            incident.year,
+            (countsByYear.get(incident.year) ?? 0) + 1
+          );
+        }
+      }
+
+      return Array.from(countsByYear.entries()).map(([year, count]) => ({
+        key: String(year),
+        label: String(year),
+        count,
+      }));
+    }
+
+    /*
+     * Rolling 12-month view, including the current month.
+     */
+    const currentMonthIndex =
+      currentYear * 12 + (currentMonth - 1);
+
+    const monthlyPoints: HistoricalTimelinePoint[] = [];
+    const monthlyCountIndexes = new Map<string, number>();
+
+    for (let offset = -11; offset <= 0; offset += 1) {
+      const absoluteMonthIndex = currentMonthIndex + offset;
+
+      const year = Math.floor(absoluteMonthIndex / 12);
+      const zeroBasedMonth =
+        ((absoluteMonthIndex % 12) + 12) % 12;
+      const month = zeroBasedMonth + 1;
+
+      const key = `${year}-${String(month).padStart(2, "0")}`;
+
+      const label = monthAxisFormatter.format(
+        new Date(Date.UTC(year, zeroBasedMonth, 1))
+      );
+
+      monthlyCountIndexes.set(key, monthlyPoints.length);
+
+      monthlyPoints.push({
+        key,
+        label,
+        count: 0,
+      });
+    }
+
+    for (const incident of incidentDateParts) {
+      const key = `${incident.year}-${String(incident.month).padStart(
+        2,
+        "0"
+      )}`;
+
+      const pointIndex = monthlyCountIndexes.get(key);
+
+      if (pointIndex === undefined) {
+        continue;
+      }
+
+      monthlyPoints[pointIndex] = {
+        ...monthlyPoints[pointIndex],
+        count: monthlyPoints[pointIndex].count + 1,
+      };
+    }
+
+    return monthlyPoints;
+  }, [filteredAlerts, historicalTimelineMode]);
+
+  const historicalTimelineTotal = useMemo(() => {
+    return historicalTimelineData.reduce(
+      (total, point) => total + point.count,
+      0
+    );
+  }, [historicalTimelineData]);
 
 
 
@@ -756,19 +929,19 @@ function formatHourLabel(hour: number) {
         <header className="historical-dashboard-header">
           <div>
             <h1>Incident Analytics</h1>
-            <p>
+            {/* <p>
               Aggregated, de-identified trends from published
               alerts
-            </p>
+            </p> */}
           </div>
 
-          <button
+          {/* <button
             type="button"
             className="historical-period-button"
           >
             This year
             <span aria-hidden="true">⌄</span>
-          </button>
+          </button> */}
         </header>
 
         <section className="historical-filter-bar">
@@ -871,7 +1044,7 @@ function formatHourLabel(hour: number) {
               </article>
 
               <article className="historical-summary-card">
-                <h2>Most Common Area</h2>
+                <h2>Spot For Noah and Camden Data?</h2>
               </article>
               <article className="historical-summary-card">
                 <h2>Peak Hour</h2>
@@ -897,7 +1070,159 @@ function formatHourLabel(hour: number) {
             </div>
 
             <article className="historical-panel historical-wide-chart">
-              <h2>Incidents Over Time</h2>
+              <div className="historical-chart-heading">
+                <div>
+                  <h2>Incidents Over Time</h2>
+
+                  <span>
+                    {historicalTimelineMode === "monthly"
+                      ? `${historicalTimelineTotal} incidents over the last 12 months`
+                      : `${historicalTimelineTotal} incidents since ${FIRST_HISTORICAL_YEAR}`}
+                  </span>
+                </div>
+                    
+                <label className="historical-chart-selector">
+                  <span className="historical-visually-hidden">
+                    Timeline grouping
+                  </span>
+                    
+                  <select
+                    value={historicalTimelineMode}
+                    onChange={(event) =>
+                      setHistoricalTimelineMode(
+                        event.target.value as HistoricalTimelineMode
+                      )
+                    }
+                  >
+                    <option value="monthly">Last 12 months</option>
+                    <option value="yearly">By year</option>
+                  </select>
+                </label>
+              </div>
+                  
+              {isLoading ? (
+                <p className="historical-chart-empty">
+                  Loading incident data...
+                </p>
+              ) : historicalTimelineData.length === 0 ? (
+                <p className="historical-chart-empty">
+                  No incident timeline data available.
+                </p>
+              ) : (
+                <div className="historical-timeline-chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={historicalTimelineData}
+                      margin={{
+                        top: 12,
+                        right: 16,
+                        bottom: 4,
+                        left: 0,
+                      }}
+                    >
+                      <defs>
+                        <linearGradient
+                          id="historicalTimelineFill"
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="0%"
+                            stopColor="#536b75"
+                            stopOpacity={0.22}
+                          />
+
+                          <stop
+                            offset="100%"
+                            stopColor="#536b75"
+                            stopOpacity={0.02}
+                          />
+                        </linearGradient>
+                      </defs>
+                    
+                      <CartesianGrid
+                        vertical={false}
+                        stroke="#e4e3de"
+                        strokeDasharray="3 3"
+                      />
+
+                      <XAxis
+                        dataKey="label"
+                        axisLine={false}
+                        tickLine={false}
+                        interval={0}
+                        minTickGap={8}
+                        tick={{
+                          fill: "#758087",
+                          fontSize:
+                            historicalTimelineMode === "yearly" ? 11 : 10,
+                        }}
+                      />
+
+                      <YAxis
+                        allowDecimals={false}
+                        axisLine={false}
+                        tickLine={false}
+                        width={32}
+                        tick={{
+                          fill: "#758087",
+                          fontSize: 10,
+                        }}
+                      />
+
+                      <Tooltip
+                        cursor={{
+                          stroke: "#9ca5aa",
+                          strokeDasharray: "4 4",
+                        }}
+                        contentStyle={{
+                          border: "1px solid #d8dcd8",
+                          borderRadius: "8px",
+                          background: "#ffffff",
+                          color: "#172026",
+                          fontSize: "12px",
+                        }}
+                        formatter={(value) => [
+                          `${Number(value)} ${
+                            Number(value) === 1 ? "incident" : "incidents"
+                          }`,
+                          "Total",
+                        ]}
+                      />
+
+                      <Area
+                        type="linear"
+                        dataKey="count"
+                        stroke="none"
+                        fill="url(#historicalTimelineFill)"
+                        isAnimationActive
+                      />
+
+                      <Line
+                        type="linear"
+                        dataKey="count"
+                        stroke="#263b43"
+                        strokeWidth={2.5}
+                        dot={{
+                          r: 3,
+                          fill: "#d54432",
+                          stroke: "#ffffff",
+                          strokeWidth: 1.5,
+                        }}
+                        activeDot={{
+                          r: 5,
+                          fill: "#d54432",
+                          stroke: "#ffffff",
+                          strokeWidth: 2,
+                        }}
+                        isAnimationActive
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </article>
 
             <div className="historical-bottom-grid">
