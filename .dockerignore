@@ -1,22 +1,42 @@
-# Local virtualenv and caches — rebuilt inside the image by `uv sync`
+# Python virtual environments and caches
 .venv
+venv
+env
 __pycache__
+**/__pycache__
 *.pyc
+*.pyo
 .ruff_cache
 .pytest_cache
+.mypy_cache
+.coverage
+htmlcov
 
-# Secrets — provided at runtime via env_file / environment, never baked in
+# Secrets and local runtime files
 .env
+.env.*
 .flask.pid
+*.log
 
 # Git and worktrees
 .git
+.gitignore
 .worktrees
+.github
 
-# Editor / OS cruft
+# Frontend is built as a separate image
+frontend
+**/node_modules
+**/.next
+**/out
+
+# Editor and operating-system files
+.vscode
+.idea
 .DS_Store
+Thumbs.db
 
-# Not needed in the API image
+# Files not needed by the API image
 uw-alert-web
 templates
 static
@@ -25,3 +45,8 @@ docs
 doc
 examples
 DS-Analytics
+
+# Deployment and local orchestration files
+k8s
+docker-compose.yml
+docker-compose.yaml
