@@ -2,7 +2,13 @@ import hashlib
 import psycopg2
 import psycopg2.errors
 
-from scraper.db.models import AlertType, IncidentCategory, UpsertAlertInput
+from scraper.db.models import (
+    AlertType,
+    IncidentCategory,
+    IncidentStatus,
+    UpsertAlertInput,
+    Weapon,
+)
 
 QUERY_RECENT_INCIDENTS_SCHEMA = {
     "name": "query_recent_incidents",
@@ -32,6 +38,10 @@ _UPSERT_ALERT_INPUT_SCHEMA = {
         "full_text": {"type": "string"},
         "raw_scraped_text": {"type": "string"},
         "source_url": {"type": "string"},
+        "status": {"type": "string", "enum": [s.value for s in IncidentStatus]},
+        "num_suspects": {"type": "integer"},
+        "weapon": {"type": "string", "enum": [w.value for w in Weapon]},
+        "suspect_at_large": {"type": "boolean"},
     },
     "required": ["is_new_incident", "alert_type", "full_text", "raw_scraped_text"],
 }
@@ -210,9 +220,10 @@ def upsert_alert(conn, inputs: dict) -> dict:
     When inputs["is_new_incident"] is True, a new row is inserted into
     incidents before the alert row. When False, the existing incident
     (inputs["incident_id"]) is refined: any of category/nearest_address/
-    google_address/lat/lng/occurred_at provided in inputs overwrite the
-    incident's current value (via COALESCE, so omitted/null fields leave
-    the existing value untouched), and last_updated_at is always refreshed.
+    google_address/lat/lng/occurred_at/status/num_suspects/weapon/
+    suspect_at_large provided in inputs overwrite the incident's current
+    value (via COALESCE, so omitted/null fields leave the existing value
+    untouched), and last_updated_at is always refreshed.
 
     A SHA-256 hash of full_text is stored in alerts.text_hash. If the hash
     already exists (UniqueViolation), the transaction is rolled back and
@@ -239,8 +250,9 @@ def upsert_alert(conn, inputs: dict) -> dict:
                     """
                     INSERT INTO incidents
                         (category, nearest_address, google_address, lat, lng,
-                         occurred_at, first_reported_at, last_updated_at)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,NOW()) RETURNING id
+                         occurred_at, first_reported_at, last_updated_at,
+                         status, num_suspects, weapon, suspect_at_large)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,NOW(),%s,%s,%s,%s) RETURNING id
                 """,
                     (
                         validated.category.value if validated.category else None,
@@ -250,6 +262,10 @@ def upsert_alert(conn, inputs: dict) -> dict:
                         validated.lng,
                         validated.occurred_at,
                         validated.reported_at,
+                        validated.status.value if validated.status else None,
+                        validated.num_suspects,
+                        validated.weapon.value if validated.weapon else None,
+                        validated.suspect_at_large,
                     ),
                 )
                 incident_id = (cur.fetchone() or [None])[0]
@@ -258,13 +274,17 @@ def upsert_alert(conn, inputs: dict) -> dict:
                 cur.execute(
                     """
                     UPDATE incidents SET
-                        category        = COALESCE(%s, category),
-                        nearest_address = COALESCE(%s, nearest_address),
-                        google_address  = COALESCE(%s, google_address),
-                        lat             = COALESCE(%s, lat),
-                        lng             = COALESCE(%s, lng),
-                        occurred_at     = COALESCE(%s, occurred_at),
-                        last_updated_at = NOW()
+                        category          = COALESCE(%s, category),
+                        nearest_address   = COALESCE(%s, nearest_address),
+                        google_address    = COALESCE(%s, google_address),
+                        lat               = COALESCE(%s, lat),
+                        lng               = COALESCE(%s, lng),
+                        occurred_at       = COALESCE(%s, occurred_at),
+                        status            = COALESCE(%s, status),
+                        num_suspects      = COALESCE(%s, num_suspects),
+                        weapon            = COALESCE(%s, weapon),
+                        suspect_at_large  = COALESCE(%s, suspect_at_large),
+                        last_updated_at   = NOW()
                     WHERE id=%s
                 """,
                     (
@@ -274,6 +294,10 @@ def upsert_alert(conn, inputs: dict) -> dict:
                         validated.lat,
                         validated.lng,
                         validated.occurred_at,
+                        validated.status.value if validated.status else None,
+                        validated.num_suspects,
+                        validated.weapon.value if validated.weapon else None,
+                        validated.suspect_at_large,
                         incident_id,
                     ),
                 )

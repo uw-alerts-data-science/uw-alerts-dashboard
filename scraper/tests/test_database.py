@@ -109,7 +109,59 @@ def test_upsert_update_with_no_fields_leaves_params_null():
     )
     incidents_update_call = cur.execute.call_args_list[0]
     params = incidents_update_call.args[1]
-    assert params == (None, None, None, None, None, None, 5)
+    assert params == (None, None, None, None, None, None, None, None, None, None, 5)
+
+
+def test_upsert_new_incident_inserts_status_and_suspect_fields():
+    conn, cur = mock_conn(fetchone=(42,))
+    from scraper.tools.database import upsert_alert
+
+    upsert_alert(
+        conn,
+        {
+            "is_new_incident": True,
+            "alert_type": "original",
+            "full_text": "Armed robbery reported near Drumheller.",
+            "raw_scraped_text": "Armed robbery reported near Drumheller.",
+            "status": "active",
+            "num_suspects": 2,
+            "weapon": "Handgun",
+            "suspect_at_large": True,
+        },
+    )
+    incidents_insert_call = cur.execute.call_args_list[0]
+    params = incidents_insert_call.args[1]
+    assert "active" in params
+    assert 2 in params
+    assert "Handgun" in params
+    assert True in params
+
+
+def test_upsert_update_coalesces_status_and_suspect_fields():
+    conn, cur = mock_conn(fetchone=(99,))
+    from scraper.tools.database import upsert_alert
+
+    upsert_alert(
+        conn,
+        {
+            "is_new_incident": False,
+            "incident_id": 5,
+            "alert_type": "update",
+            "full_text": "UPDATE: a suspect is in custody.",
+            "raw_scraped_text": "UPDATE: a suspect is in custody.",
+            "status": "resolved",
+            "suspect_at_large": False,
+        },
+    )
+    calls_str = str(cur.execute.call_args_list)
+    assert "status" in calls_str
+    assert "num_suspects" in calls_str
+    assert "weapon" in calls_str
+    assert "suspect_at_large" in calls_str
+    incidents_update_call = cur.execute.call_args_list[0]
+    params = incidents_update_call.args[1]
+    assert "resolved" in params
+    assert False in params
 
 
 def test_known_source_urls_returns_subset_present_in_db():

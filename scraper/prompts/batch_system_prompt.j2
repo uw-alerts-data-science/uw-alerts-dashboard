@@ -14,6 +14,12 @@ FIELD EXTRACTION GUIDE — additional fields, set on the original post only, omi
 - nearest_address: the incident location as stated in the original post
 - google_address / lat / lng: from the geocode_address result
 
+STATUS AND SUSPECT FIELDS (status, num_suspects, weapon, suspect_at_large):
+Since you can see the entire article thread at once (unlike a live scrape, which sees one new block at a time), read all blocks before deciding what to set on each upsert_alert call:
+- On the original post's upsert_alert call, set num_suspects/weapon from whatever the original post states, and status="active" unless the original post itself already reports the incident resolved.
+- On each subsequent update's upsert_alert call (is_new_incident=false), only set status/num_suspects/weapon/suspect_at_large when that specific update block states a genuine change (e.g. "suspect is in custody" -> status="resolved", suspect_at_large=false; "the scene has been cleared" -> status="cleared"). Leave them null on updates that are just narrative color, exactly as with category/location/time refinements.
+- status: one of: {{ status_list }}. weapon: one of: {{ weapon_list }}.
+
 STEPS — follow in order:
 1. Parse the article into individual blocks: the original post and each update. Process oldest-first (bottom to top).
 2. From the original post, identify the incident location. If a street address or named campus location is present, call geocode_address once.
