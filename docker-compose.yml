@@ -22,6 +22,10 @@ services:
     container_name: uw-alerts-api
     ports:
       - "8000:8000"
+    environment:
+      # Inside Docker Compose, PostgreSQL is reached by the service name "postgres".
+      # This overrides DATABASE_URL from .env for local container development.
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/uw_alerts_dev
     env_file:
       - ./.env
     depends_on:
@@ -57,7 +61,8 @@ services:
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     profiles:
       - jobs
 

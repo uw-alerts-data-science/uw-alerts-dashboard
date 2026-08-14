@@ -5,6 +5,19 @@ logger = logging.getLogger("scraper")
 _NULL = {"lat": None, "lng": None, "google_address": None}
 
 
+def build_geocode_address_schema(description: str) -> dict:
+    """Build the geocode_address tool schema with a caller-specific description."""
+    return {
+        "name": "geocode_address",
+        "description": description,
+        "input_schema": {
+            "type": "object",
+            "properties": {"address": {"type": "string"}},
+            "required": ["address"],
+        },
+    }
+
+
 def geocode_address(address: str, api_key: str) -> dict:
     try:
         results = googlemaps.Client(key=api_key).geocode(f"{address}, Seattle, WA")

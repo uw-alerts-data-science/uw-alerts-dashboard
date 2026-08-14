@@ -1,6 +1,7 @@
 import logging
 import sys
 from pythonjsonlogger import jsonlogger
+
 # Field rename map: native name -> desired name in JSON output
 _RENAME = {
     "levelname": "level",

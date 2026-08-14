@@ -8,8 +8,18 @@ CREATE TABLE IF NOT EXISTS incidents (
     occurred_at       TIMESTAMPTZ,
     first_reported_at TIMESTAMPTZ,
     last_updated_at   TIMESTAMPTZ,
-    created_at        TIMESTAMPTZ DEFAULT NOW()
+    created_at        TIMESTAMPTZ DEFAULT NOW(),
+    -- SHA-256 of the raw article text as of the last successful live-agent
+    -- scrape. Populated directly by Python (never by the LLM), so the live
+    -- agent can skip calling Claude entirely when a known article's current
+    -- text is unchanged, without depending on the LLM faithfully
+    -- reproducing every Unicode character when it "copies" text verbatim.
+    last_scraped_hash CHAR(64)
 );
+
+-- Idempotent forward-migration for databases created before this column
+-- existed (CREATE TABLE IF NOT EXISTS above only applies to brand-new tables).
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS last_scraped_hash CHAR(64);
 
 CREATE TABLE IF NOT EXISTS alerts (
     id               SERIAL PRIMARY KEY,

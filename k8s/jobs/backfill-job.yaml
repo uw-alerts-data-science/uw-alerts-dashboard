@@ -1,0 +1,57 @@
+# On-demand FULL database refresh (bulk backfill).
+#
+# ┌─ This directory (k8s/jobs/) holds MANUAL, on-demand Jobs. The deploy workflow
+# │  does NOT apply it (it only sweeps k8s/app/ and k8s/db/). Run these by hand.
+# └─ Do NOT `kubectl apply` a generateName resource — it requires `create`.
+#
+# Runs `scraper.scripts.batch_history` once to completion — the heavy, parallel scrape
+# of all blog pages. This is the manual "full refresh"; the every-6h incremental
+# run is the separate CronJob (k8s/app/scraper-cronjob.yaml).
+#
+# Reuses the API image with an overridden command. `envFrom` pulls in DATABASE_URL
+# + the scraper API keys.
+#
+# HOW TO RUN (note: `create`, NOT `apply`):
+#   kubectl create -f k8s/jobs/backfill-job.yaml
+#   kubectl get jobs -n uwalerts
+#   kubectl logs -f -l job-name -n uwalerts        # or: kubectl logs -f job/<generated-name>
+#
+# `generateName` gives every run a unique name (uw-backfill-abc12), so you can
+# re-run anytime without deleting the previous Job. `apply` doesn't support
+# generateName; `create` does.
+#
+# Safe to re-run: batch_history is idempotent (dedupes on text_hash + pre-filters
+# known URLs), so a second run won't create duplicates.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: uw-backfill-
+  namespace: uwalerts
+spec:
+  backoffLimit: 1                  # don't retry a big scrape endlessly on failure
+  ttlSecondsAfterFinished: 86400   # auto-delete the finished Job after 1 day
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: backfill
+          image: registry.digitalocean.com/uwalerts/api:latest
+          command: ["uv", "run", "python", "-m", "scraper.scripts.batch_history"]
+          envFrom:
+            - secretRef:
+                name: uwalerts-secrets
+          env:
+            # batch_history defaults to 50 parallel workers — gentler on the
+            # single-node cluster + external APIs. Tune up if it's too slow.
+            - name: BATCH_WORKERS
+              value: "10"
+            # Uncomment to preview what WOULD be written without touching the DB:
+            # - name: DRY_RUN
+            #   value: "true"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

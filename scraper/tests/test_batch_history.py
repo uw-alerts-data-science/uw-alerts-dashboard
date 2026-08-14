@@ -37,10 +37,10 @@ def _end_turn_response():
 
 
 @patch(
-    "scraper.batch_history.upsert_alert",
+    "scraper.scripts.batch_history.upsert_alert",
     return_value={"status": "inserted", "incident_id": 1, "alert_id": 1},
 )
-@patch("scraper.batch_history.get_anthropic_client")
+@patch("scraper.scripts.batch_history.get_anthropic_client")
 def test_run_batch_agent_upsert_returns_inserted(mock_get_client, mock_upsert):
     mock_get_client.return_value.messages.create.side_effect = [
         _tool_response(
@@ -53,7 +53,7 @@ def test_run_batch_agent_upsert_returns_inserted(mock_get_client, mock_upsert):
         ),
         _end_turn_response(),
     ]
-    from scraper.batch_history import run_batch_agent
+    from scraper.scripts.batch_history import run_batch_agent
 
     conn = MagicMock()
     result = run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
@@ -61,31 +61,87 @@ def test_run_batch_agent_upsert_returns_inserted(mock_get_client, mock_upsert):
     assert mock_upsert.called
 
 
-@patch("scraper.batch_history.get_anthropic_client")
+@patch("scraper.scripts.batch_history.record_scrape_hash")
+@patch(
+    "scraper.scripts.batch_history.upsert_alert",
+    return_value={"status": "inserted", "incident_id": 7, "alert_id": 1},
+)
+@patch("scraper.scripts.batch_history.get_anthropic_client")
+def test_run_batch_agent_records_scrape_hash_for_new_incident(
+    mock_get_client, mock_upsert, mock_record_hash
+):
+    import hashlib
+
+    mock_get_client.return_value.messages.create.side_effect = [
+        _tool_response(
+            "upsert_alert",
+            {
+                "alert_type": "original",
+                "full_text": "Theft near HUB.",
+                "raw_scraped_text": "Theft near HUB.",
+            },
+        ),
+        _end_turn_response(),
+    ]
+    from scraper.scripts.batch_history import run_batch_agent
+
+    conn = MagicMock()
+    run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
+    expected_hash = hashlib.sha256(SAMPLE_ARTICLE["raw_text"].encode()).hexdigest()
+    mock_record_hash.assert_called_once_with(conn, 7, expected_hash)
+
+
+@patch("scraper.scripts.batch_history.record_scrape_hash")
+@patch("scraper.scripts.batch_history.upsert_alert")
+@patch("scraper.scripts.batch_history.get_anthropic_client")
+def test_run_batch_agent_dry_run_does_not_record_scrape_hash(
+    mock_get_client, mock_upsert, mock_record_hash, monkeypatch
+):
+    monkeypatch.setenv("DRY_RUN", "true")
+    mock_upsert.return_value = {"status": "dry_run", "incident_id": 0}
+    mock_get_client.return_value.messages.create.side_effect = [
+        _tool_response(
+            "upsert_alert",
+            {
+                "alert_type": "original",
+                "full_text": "Theft near HUB.",
+                "raw_scraped_text": "Theft near HUB.",
+            },
+        ),
+        _end_turn_response(),
+    ]
+    from scraper.scripts.batch_history import run_batch_agent
+
+    conn = MagicMock()
+    run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
+    mock_record_hash.assert_not_called()
+
+
+@patch("scraper.scripts.batch_history.get_anthropic_client")
 def test_run_batch_agent_end_turn_returns_error(mock_get_client):
     mock_get_client.return_value.messages.create.return_value = _end_turn_response()
-    from scraper.batch_history import run_batch_agent
+    from scraper.scripts.batch_history import run_batch_agent
 
     conn = MagicMock()
     result = run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
     assert result.get("status") == "error"
 
 
-@patch("scraper.batch_history.get_anthropic_client")
+@patch("scraper.scripts.batch_history.get_anthropic_client")
 def test_run_batch_agent_returns_error_on_api_failure(mock_get_client):
     import anthropic as anthropic_mod
 
     mock_get_client.return_value.messages.create.side_effect = anthropic_mod.APIError(
         message="rate limit", request=MagicMock(), body=None
     )
-    from scraper.batch_history import run_batch_agent
+    from scraper.scripts.batch_history import run_batch_agent
 
     conn = MagicMock()
     result = run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
     assert result["status"] == "error"
 
 
-@patch("scraper.batch_history.get_anthropic_client")
+@patch("scraper.scripts.batch_history.get_anthropic_client")
 def test_run_batch_agent_dry_run_skips_write(mock_get_client, monkeypatch):
     monkeypatch.setenv("DRY_RUN", "true")
     mock_get_client.return_value.messages.create.side_effect = [
@@ -99,7 +155,7 @@ def test_run_batch_agent_dry_run_skips_write(mock_get_client, monkeypatch):
         ),
         _end_turn_response(),
     ]
-    from scraper.batch_history import run_batch_agent
+    from scraper.scripts.batch_history import run_batch_agent
 
     conn = MagicMock()
     result = run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
@@ -111,14 +167,14 @@ def test_run_batch_agent_dry_run_skips_write(mock_get_client, monkeypatch):
 
 
 def test_batch_tools_contains_expected_names():
-    from scraper.batch_history import BATCH_TOOLS
+    from scraper.scripts.batch_history import BATCH_TOOLS
 
     names = {t["name"] for t in BATCH_TOOLS}
     assert names == {"geocode_address", "upsert_alert"}
 
 
 def test_batch_tools_upsert_alert_required_fields():
-    from scraper.batch_history import BATCH_TOOLS
+    from scraper.scripts.batch_history import BATCH_TOOLS
 
     upsert = next(t for t in BATCH_TOOLS if t["name"] == "upsert_alert")
     required = set(upsert["input_schema"]["required"])
@@ -134,22 +190,25 @@ def test_batch_tools_upsert_alert_required_fields():
 
 
 @patch(
-    "scraper.batch_history.scrape_article_urls",
+    "scraper.scripts.batch_history.scrape_article_urls",
     return_value=[
         "https://emergency.uw.edu/2024/01/theft/",
         "https://emergency.uw.edu/2024/02/robbery/",
     ],
 )
 def test_discover_article_urls_returns_flat_list(mock_scrape):
-    from scraper.batch_history import _discover_article_urls
+    from scraper.scripts.batch_history import _discover_article_urls
 
     urls = _discover_article_urls(start_page=2, end_page=1, max_pages=50)
     assert len(urls) == 4  # 2 pages × 2 urls
 
 
-@patch("scraper.batch_history.scrape_article_urls", side_effect=Exception("timeout"))
+@patch(
+    "scraper.scripts.batch_history.scrape_article_urls",
+    side_effect=Exception("timeout"),
+)
 def test_discover_article_urls_skips_failed_pages(mock_scrape):
-    from scraper.batch_history import _discover_article_urls
+    from scraper.scripts.batch_history import _discover_article_urls
 
     urls = _discover_article_urls(start_page=2, end_page=1, max_pages=50)
     assert urls == []
@@ -159,7 +218,7 @@ def test_discover_article_urls_skips_failed_pages(mock_scrape):
 
 
 def test_chunk_divides_evenly():
-    from scraper.batch_history import _chunk
+    from scraper.scripts.batch_history import _chunk
 
     result = _chunk([1, 2, 3, 4], 2)
     assert len(result) == 2
@@ -167,7 +226,7 @@ def test_chunk_divides_evenly():
 
 
 def test_chunk_handles_more_workers_than_items():
-    from scraper.batch_history import _chunk
+    from scraper.scripts.batch_history import _chunk
 
     result = _chunk([1, 2], 10)
     assert len(result) == 2
@@ -178,15 +237,15 @@ def test_chunk_handles_more_workers_than_items():
 
 
 @patch(
-    "scraper.batch_history.run_batch_agent",
+    "scraper.scripts.batch_history.run_batch_agent",
     return_value={"status": "inserted", "incident_id": 1, "alert_id": 1},
 )
-@patch("scraper.batch_history.scrape_article", return_value=SAMPLE_ARTICLE)
-@patch("scraper.batch_history.psycopg2.connect")
+@patch("scraper.scripts.batch_history.scrape_article", return_value=SAMPLE_ARTICLE)
+@patch("scraper.scripts.batch_history.psycopg2.connect")
 def test_process_batch_worker_calls_agent_for_each_url(
     mock_pg, mock_scrape, mock_agent
 ):
-    from scraper.batch_history import _process_batch_worker
+    from scraper.scripts.batch_history import _process_batch_worker
 
     urls = [
         "https://emergency.uw.edu/2024/01/theft/",
@@ -197,10 +256,13 @@ def test_process_batch_worker_calls_agent_for_each_url(
     assert all(r["status"] == "inserted" for r in results)
 
 
-@patch("scraper.batch_history.scrape_article", side_effect=Exception("network error"))
-@patch("scraper.batch_history.psycopg2.connect")
+@patch(
+    "scraper.scripts.batch_history.scrape_article",
+    side_effect=Exception("network error"),
+)
+@patch("scraper.scripts.batch_history.psycopg2.connect")
 def test_process_batch_worker_records_scrape_error(mock_pg, mock_scrape):
-    from scraper.batch_history import _process_batch_worker
+    from scraper.scripts.batch_history import _process_batch_worker
 
     results = _process_batch_worker(["https://emergency.uw.edu/2024/01/theft/"], CONFIG)
     assert results[0]["status"] == "error"
@@ -210,14 +272,14 @@ def test_process_batch_worker_records_scrape_error(mock_pg, mock_scrape):
 
 
 @patch(
-    "scraper.batch_history._process_batch_worker",
+    "scraper.scripts.batch_history._process_batch_worker",
     return_value=[
         {"status": "inserted", "incident_id": 1, "alert_id": 1},
         {"status": "inserted", "incident_id": 2, "alert_id": 2},
     ],
 )
 @patch(
-    "scraper.batch_history._discover_article_urls",
+    "scraper.scripts.batch_history._discover_article_urls",
     return_value=[
         "https://emergency.uw.edu/a/",
         "https://emergency.uw.edu/b/",
@@ -225,48 +287,51 @@ def test_process_batch_worker_records_scrape_error(mock_pg, mock_scrape):
         "https://emergency.uw.edu/d/",
     ],
 )
-@patch("scraper.batch_history.psycopg2.connect")
+@patch("scraper.scripts.batch_history.psycopg2.connect")
 def test_run_batch_counts_inserted(mock_pg, mock_discover, mock_worker):
     mock_pg.return_value.cursor.return_value.__enter__.return_value.fetchall.return_value = []
-    from scraper.batch_history import run_batch
+    from scraper.scripts.batch_history import run_batch
 
     rc = run_batch(CONFIG, max_workers=2)
     assert rc == 0
 
 
 @patch(
-    "scraper.batch_history._process_batch_worker",
+    "scraper.scripts.batch_history._process_batch_worker",
     return_value=[
         {"status": "error", "error": "something broke"},
     ],
 )
 @patch(
-    "scraper.batch_history._discover_article_urls",
+    "scraper.scripts.batch_history._discover_article_urls",
     return_value=["https://emergency.uw.edu/a/"],
 )
-@patch("scraper.batch_history.psycopg2.connect")
+@patch("scraper.scripts.batch_history.psycopg2.connect")
 def test_run_batch_returns_1_when_all_errors_no_inserts(
     mock_pg, mock_discover, mock_worker
 ):
     mock_pg.return_value.cursor.return_value.__enter__.return_value.fetchall.return_value = []
-    from scraper.batch_history import run_batch
+    from scraper.scripts.batch_history import run_batch
 
     rc = run_batch(CONFIG, max_workers=1)
     assert rc == 1
 
 
-@patch("scraper.batch_history._discover_article_urls", return_value=[])
-@patch("scraper.batch_history.psycopg2.connect")
+@patch("scraper.scripts.batch_history._discover_article_urls", return_value=[])
+@patch("scraper.scripts.batch_history.psycopg2.connect")
 def test_run_batch_returns_0_when_nothing_to_process(mock_pg, mock_discover):
-    from scraper.batch_history import run_batch
+    from scraper.scripts.batch_history import run_batch
 
     rc = run_batch(CONFIG, max_workers=5)
     assert rc == 0
 
 
-@patch("scraper.batch_history.scrape_article_urls", side_effect=Exception("site down"))
+@patch(
+    "scraper.scripts.batch_history.scrape_article_urls",
+    side_effect=Exception("site down"),
+)
 def test_run_batch_returns_0_when_all_pages_fail_to_scrape(mock_scrape):
-    from scraper.batch_history import run_batch
+    from scraper.scripts.batch_history import run_batch
 
     rc = run_batch(CONFIG, start_page=2, end_page=1, max_workers=1)
     assert rc == 0

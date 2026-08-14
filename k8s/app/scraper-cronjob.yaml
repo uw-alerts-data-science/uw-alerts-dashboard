@@ -1,0 +1,34 @@
+# The scraper, on a schedule.
+#
+# Why a CronJob? `python -m scraper.agent` runs once and exits (it checks
+# the UW blog, writes any new alerts, then terminates). A CronJob runs that to
+# completion on a schedule. A Deployment would be WRONG — it would keep
+# restarting the finished process forever.
+#
+# We reuse the API image and override the command (same trick as the schema Job).
+# The root Dockerfile bakes the whole repo, so `-m scraper.agent` works;
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scraper
+  namespace: uwalerts
+spec:
+  schedule: "0 */6 * * *"        # every 6 hours, on the hour. NOTE: cluster time is UTC.
+  concurrencyPolicy: Forbid      # if a run overruns 6h, don't start a second one on top
+  successfulJobsHistoryLimit: 3  # keep the last 3 successful jobs for `kubectl logs`
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: scraper
+              image: registry.digitalocean.com/uwalerts/api:latest
+              command: ["uv", "run", "python", "-m", "scraper.agent"]
+              envFrom:
+                # The scraper needs ALL keys: DATABASE_URL + GOOGLE_MAPS_API_KEY +
+                # ANTHROPIC_API_KEY (or the USE_AZURE + AZURE_* trio).
+                - secretRef:
+                    name: uwalerts-secrets

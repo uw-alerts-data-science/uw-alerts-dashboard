@@ -14,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.12"]
 
     steps:
       - uses: actions/checkout@v3
@@ -44,6 +44,11 @@ jobs:
           path-to-lcov: coverage.lcov
           flag-name: run ${{ join(matrix.*, ' - ') }}
           parallel: true
+  docker_build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t uwalerts-api:ci .
 
   test_scraper:
     runs-on: ubuntu-latest
@@ -68,7 +73,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Install dependencies
         run: uv sync
@@ -91,4 +96,4 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           parallel-finished: true
-          carryforward: "run-3.10, run-3.11"
+          carryforward: "run-3.12"

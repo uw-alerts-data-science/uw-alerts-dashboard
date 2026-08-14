@@ -55,26 +55,34 @@ uv run poe fmt            # ruff format + ruff check --fix
 uv run poe lint           # check only, no writes
 
 # Scraper (dry run — no DB writes)
-DRY_RUN=true python -m scraper.scraper_agent
+DRY_RUN=true python -m scraper.agent
 
 # CSV → Postgres migration (one-time)
 python -m scraper.db.migrate
 ```
 
-CI runs on Python 3.10 and 3.11 using uv. Ruff config is in `pyproject.toml` (`[tool.ruff]`); `E501`, `W291`, `W293` are disabled.
+CI runs on Python 3.12 using uv, matching the production Docker image. Ruff config is in `pyproject.toml` (`[tool.ruff]`); `E501`, `W291`, `W293` are disabled.
 
 ## Architecture
 
 ```
 scraper/                      # Agentic scraper (runs independently of Flask)
-  scraper_agent.py            # Claude tool-use agent — entry point
+  agent.py                     # Thin entry point — delegates to live_discovery.run_live_discovery()
+  live_discovery.py            # Live incremental scrape: page-walk discovery + per-article agent loop
   config.py                   # Env loading; Anthropic client factory (direct or Azure)
-  system_prompt.py            # Agent system prompt
+  prompts/                    # Jinja-templated system prompts (rendered via render_prompt())
+    system_prompt.j2
+    batch_system_prompt.j2
+    _article_block_parsing.j2  # Shared partial: article structure + field extraction guide
+  scripts/
+    batch_history.py           # Parallel bulk importer (historical backfill)
+    audit.py                   # DB audit report (record counts, category distribution, data quality)
   tools/
-    scrape.py                 # BeautifulSoup fetch of UW Alerts blog
+    scrape.py                 # BeautifulSoup fetch of UW Alerts blog (scrape_page, scrape_article_urls, scrape_article)
     geocode.py                # Google Maps geocoding
-    database.py               # query_recent_incidents, upsert_alert (Postgres)
+    database.py               # query_recent_incidents, upsert_alert, known_source_urls, find_incident_id_by_source_url (Postgres)
   db/
+    models.py                  # Pydantic contract mirroring schema.sql (IncidentCategory, AlertType, etc.)
     migrate.py                # One-time CSV → Postgres migration
   tests/                      # pytest-based tests for all scraper modules
 
@@ -99,11 +107,12 @@ static/                       # CSS and images
 ## Data flow
 
 **Scraper agent** (runs on a schedule, independent of Flask):
-1. `scrape_uw_blog()` fetches the UW Alerts blog via BeautifulSoup
-2. `query_recent_incidents()` fetches recent DB rows for duplicate detection
-3. Claude (Haiku by default) decides if the scraped content is new; if so, calls `geocode_address()` then `upsert_alert()` which writes to `incidents` + `alerts` tables
-4. `mark_no_update` terminates the loop when nothing new is found
-5. `DRY_RUN=true` skips all DB writes for safe testing
+1. `_discover_urls_to_process()` walks blog listing pages newest-first via `scrape_article_urls()`, expanding only while every URL on a page is unseen (checked deterministically via `known_source_urls()`); stops expanding once a page has a known URL, capped at `max_pages` with a warning logged if the cap is hit while still all-new.
+2. For every article URL in that range, `_process_live_article()` looks up `find_incident_id_by_source_url()` — a plain SQL fact, not an LLM judgment call — and tells Claude upfront whether this is a brand-new incident or an update to a known one.
+3. Claude parses the article into blocks and calls `geocode_address()`/`upsert_alert()` per block, looping until `end_turn` (not stopping after the first write) — so a multi-block article or a burst of several new incidents in one poll are all captured, not just the first one.
+4. `upsert_alert()` on an update also refines the incident's own `category`/address/`lat`/`lng`/`occurred_at` via COALESCE when the alert text is a genuine correction (vs. narrative color) — guided by few-shot examples in `system_prompt.j2`.
+5. Zero new alerts for an article is a normal outcome, not an error — most articles on a given cycle will already be fully recorded.
+6. `DRY_RUN=true` skips all DB writes for safe testing.
 
 **Flask app** (reads from Postgres; falls back to legacy CSV path for `/fully_update`):
 1. Routes call `db.query_incidents_as_dataframe(hours=N)` for recent alerts

@@ -16,11 +16,6 @@ GOOD_HTML = """<html><body>
 </main>
 </body></html>"""
 
-NO_ARTICLE_HTML = """<html><body>
-<main class="site-main">
-</main>
-</body></html>"""
-
 NO_DATE_HTML = """<html><body>
 <main class="site-main">
   <article>
@@ -46,66 +41,6 @@ MULTI_ARTICLE_HTML = """<html><body>
   </article>
 </main>
 </body></html>"""
-
-
-@responses.activate
-def test_returns_raw_text_and_scraped_at():
-    responses.add(
-        responses.GET, "https://emergency.uw.edu/", body=GOOD_HTML, status=200
-    )
-    from scraper.tools.scrape import scrape_uw_blog
-
-    result = scrape_uw_blog()
-    assert "ORIGINAL POST" in result["raw_text"]
-    assert "June 16, 2026" in result["raw_text"]
-    assert "scraped_at" in result
-
-
-@responses.activate
-def test_raises_on_missing_site_main():
-    responses.add(
-        responses.GET,
-        "https://emergency.uw.edu/",
-        body="<html><body></body></html>",
-        status=200,
-    )
-    from scraper.tools.scrape import scrape_uw_blog, ScrapingError
-
-    with pytest.raises(ScrapingError, match="site-main"):
-        scrape_uw_blog()
-
-
-@responses.activate
-def test_raises_on_no_article():
-    responses.add(
-        responses.GET, "https://emergency.uw.edu/", body=NO_ARTICLE_HTML, status=200
-    )
-    from scraper.tools.scrape import scrape_uw_blog, ScrapingError
-
-    with pytest.raises(ScrapingError, match="article"):
-        scrape_uw_blog()
-
-
-@responses.activate
-def test_raises_on_no_date():
-    responses.add(
-        responses.GET, "https://emergency.uw.edu/", body=NO_DATE_HTML, status=200
-    )
-    from scraper.tools.scrape import scrape_uw_blog, ScrapingError
-
-    with pytest.raises(ScrapingError, match="date"):
-        scrape_uw_blog()
-
-
-@responses.activate
-def test_raises_on_network_error():
-    responses.add(
-        responses.GET, "https://emergency.uw.edu/", body=ConnectionError("timeout")
-    )
-    from scraper.tools.scrape import scrape_uw_blog, ScrapingError
-
-    with pytest.raises(ScrapingError):
-        scrape_uw_blog()
 
 
 # ── scrape_page() tests ──────────────────────────────────────────────────────
@@ -323,3 +258,27 @@ def test_scrape_article_raises_on_missing_article_element():
 
     with pytest.raises(ScrapingError):
         scrape_article(url)
+
+
+@responses.activate
+def test_scrape_article_retries_on_429_then_succeeds():
+    url = "https://emergency.uw.edu/2024/01/theft/"
+    responses.add(responses.GET, url, status=429, headers={"Retry-After": "0"})
+    responses.add(responses.GET, url, body=ARTICLE_HTML, status=200)
+    from scraper.tools.scrape import scrape_article
+
+    result = scrape_article(url, max_retries=1)
+    assert "Theft occurred near HUB" in result["raw_text"]
+    assert len(responses.calls) == 2
+
+
+@responses.activate
+def test_scrape_article_raises_after_max_retries_on_429():
+    url = "https://emergency.uw.edu/2024/01/theft/"
+    responses.add(responses.GET, url, status=429, headers={"Retry-After": "0"})
+    responses.add(responses.GET, url, status=429, headers={"Retry-After": "0"})
+    from scraper.tools.scrape import scrape_article, ScrapingError
+
+    with pytest.raises(ScrapingError, match="429"):
+        scrape_article(url, max_retries=1)
+    assert len(responses.calls) == 2
