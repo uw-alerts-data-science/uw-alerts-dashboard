@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS incidents (
 -- Idempotent forward-migration for databases created before this column
 -- existed (CREATE TABLE IF NOT EXISTS above only applies to brand-new tables).
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS last_scraped_hash CHAR(64);
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS status VARCHAR(20);
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS num_suspects INT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS weapon VARCHAR(50);
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS suspect_at_large BOOLEAN;
 
 CREATE TABLE IF NOT EXISTS alerts (
     id               SERIAL PRIMARY KEY,

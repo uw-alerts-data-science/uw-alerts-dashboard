@@ -9,7 +9,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from scraper.db.models import IncidentCategory
+from scraper.db.models import IncidentCategory, IncidentStatus, Weapon
 
 _ENV = Environment(
     loader=FileSystemLoader(Path(__file__).parent),
@@ -20,6 +20,8 @@ _ENV = Environment(
 
 # Available to every template without needing to pass it explicitly.
 _ENV.globals["category_list"] = ", ".join(c.value for c in IncidentCategory)
+_ENV.globals["status_list"] = ", ".join(s.value for s in IncidentStatus)
+_ENV.globals["weapon_list"] = ", ".join(w.value for w in Weapon)
 
 
 def render_prompt(template_name: str, **context) -> str:

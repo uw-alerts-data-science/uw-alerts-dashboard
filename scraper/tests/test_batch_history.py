@@ -186,6 +186,16 @@ def test_batch_tools_upsert_alert_required_fields():
     }
 
 
+def test_batch_tools_upsert_alert_includes_status_and_suspect_properties():
+    from scraper.scripts.batch_history import BATCH_TOOLS
+
+    upsert = next(t for t in BATCH_TOOLS if t["name"] == "upsert_alert")
+    properties = upsert["input_schema"]["properties"]
+    assert {"status", "num_suspects", "weapon", "suspect_at_large"} <= properties.keys()
+    assert "active" in properties["status"]["enum"]
+    assert "Handgun" in properties["weapon"]["enum"]
+
+
 # ── _discover_article_urls ───────────────────────────────────────────────────
 
 

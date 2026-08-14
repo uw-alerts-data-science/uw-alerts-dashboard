@@ -35,6 +35,20 @@ class AlertType(str, Enum):
     UPDATE = "update"
 
 
+class IncidentStatus(str, Enum):
+    ACTIVE = "active"
+    CLEARED = "cleared"
+    RESOLVED = "resolved"
+
+
+class Weapon(str, Enum):
+    HANDGUN = "Handgun"
+    KNIFE = "Knife"
+    OTHER_FIREARM = "Other Firearm"
+    NONE = "None"
+    UNKNOWN = "Unknown"
+
+
 class Incident(BaseModel):
     """Mirrors the `incidents` table."""
 
@@ -48,6 +62,10 @@ class Incident(BaseModel):
     first_reported_at: datetime | None = None
     last_updated_at: datetime | None = None
     created_at: datetime | None = None
+    status: IncidentStatus | None = None
+    num_suspects: int | None = None
+    weapon: Weapon | None = None
+    suspect_at_large: bool | None = None
 
     @field_validator("category", mode="before")
     @classmethod
@@ -58,6 +76,26 @@ class Incident(BaseModel):
             return IncidentCategory(v)
         except ValueError:
             return IncidentCategory.OTHER
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def coerce_unknown_status_to_none(cls, v):
+        if v is None or v == "":
+            return None
+        try:
+            return IncidentStatus(v)
+        except ValueError:
+            return None
+
+    @field_validator("weapon", mode="before")
+    @classmethod
+    def coerce_unknown_weapon_to_none(cls, v):
+        if v is None or v == "":
+            return None
+        try:
+            return Weapon(v)
+        except ValueError:
+            return None
 
 
 class Alert(BaseModel):
@@ -97,6 +135,10 @@ class UpsertAlertInput(BaseModel):
     full_text: str
     raw_scraped_text: str | None = None
     source_url: str | None = None
+    status: IncidentStatus | None = None
+    num_suspects: int | None = None
+    weapon: Weapon | None = None
+    suspect_at_large: bool | None = None
 
     @field_validator("category", mode="before")
     @classmethod
@@ -107,3 +149,23 @@ class UpsertAlertInput(BaseModel):
             return IncidentCategory(v)
         except ValueError:
             return IncidentCategory.OTHER
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def coerce_unknown_status_to_none(cls, v):
+        if v is None or v == "":
+            return None
+        try:
+            return IncidentStatus(v)
+        except ValueError:
+            return None
+
+    @field_validator("weapon", mode="before")
+    @classmethod
+    def coerce_unknown_weapon_to_none(cls, v):
+        if v is None or v == "":
+            return None
+        try:
+            return Weapon(v)
+        except ValueError:
+            return None
