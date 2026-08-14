@@ -7,7 +7,9 @@ on:
       - feat/integrate-fast-api
     paths:
       - "scraper/**"
+      - "data/**"
       - "docker/scraper.Dockerfile"
+      - ".dockerignore"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/push-scraper-image.yml"
