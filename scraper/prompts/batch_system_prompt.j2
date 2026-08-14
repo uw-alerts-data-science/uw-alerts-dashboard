@@ -19,6 +19,7 @@ Since you can see the entire article thread at once (unlike a live scrape, which
 - On the original post's upsert_alert call, set num_suspects/weapon from whatever the original post states, and status="active" unless the original post itself already reports the incident resolved.
 - On each subsequent update's upsert_alert call (is_new_incident=false), only set status/num_suspects/weapon/suspect_at_large when that specific update block states a genuine change (e.g. "suspect is in custody" -> status="resolved", suspect_at_large=false; "the scene has been cleared" -> status="cleared"). Leave them null on updates that are just narrative color, exactly as with category/location/time refinements.
 - status: one of: {{ status_list }}. weapon: one of: {{ weapon_list }}.
+- num_suspects only when the text gives an exact, unambiguous count. Never round a vague quantity down to a specific number — "several other males," "a group of," or "multiple suspects" do NOT mean 0 or any other specific integer; leave num_suspects null for those.
 
 STEPS — follow in order:
 1. Parse the article into individual blocks: the original post and each update. Process oldest-first (bottom to top).
