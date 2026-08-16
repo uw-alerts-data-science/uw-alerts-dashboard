@@ -12,5 +12,6 @@ COPY scraper ./scraper
 COPY data ./data
 
 ENV PYTHONPATH=/app
+ENV PATH="/app/.venv/bin:$PATH"
 
-CMD ["uv", "run", "python", "-m", "scraper.scraper_agent"]
+CMD ["python", "-m", "scraper.agent"]
