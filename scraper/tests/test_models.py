@@ -2,7 +2,7 @@
 import pytest
 from pydantic import ValidationError
 
-from scraper.db.models import IncidentCategory, UpsertAlertInput
+from scraper.db.models import IncidentCategory, IncidentStatus, UpsertAlertInput, Weapon
 
 BASE_INPUT = {
     "is_new_incident": True,
@@ -51,3 +51,39 @@ def test_missing_full_text_raises():
 def test_malformed_occurred_at_raises():
     with pytest.raises(ValidationError):
         UpsertAlertInput(**{**BASE_INPUT, "occurred_at": "sometime last Tuesday"})
+
+
+def test_known_status_validates():
+    v = UpsertAlertInput(**{**BASE_INPUT, "status": "cleared"})
+    assert v.status == IncidentStatus.CLEARED
+
+
+def test_unknown_status_coerces_to_none():
+    v = UpsertAlertInput(**{**BASE_INPUT, "status": "in_progress"})
+    assert v.status is None
+
+
+def test_blank_status_becomes_none():
+    v = UpsertAlertInput(**{**BASE_INPUT, "status": ""})
+    assert v.status is None
+
+
+def test_missing_status_defaults_to_none():
+    v = UpsertAlertInput(**BASE_INPUT)
+    assert v.status is None
+
+
+def test_known_weapon_validates():
+    v = UpsertAlertInput(**{**BASE_INPUT, "weapon": "Handgun"})
+    assert v.weapon == Weapon.HANDGUN
+
+
+def test_unknown_weapon_coerces_to_none():
+    v = UpsertAlertInput(**{**BASE_INPUT, "weapon": "Machete"})
+    assert v.weapon is None
+
+
+def test_num_suspects_and_suspect_at_large_pass_through():
+    v = UpsertAlertInput(**{**BASE_INPUT, "num_suspects": 2, "suspect_at_large": True})
+    assert v.num_suspects == 2
+    assert v.suspect_at_large is True

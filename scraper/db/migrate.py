@@ -150,6 +150,10 @@ def seed_from_snapshot(snapshot_dir: str, conn) -> dict:
         "first_reported_at",
         "last_updated_at",
         "last_scraped_hash",
+        "status",
+        "num_suspects",
+        "weapon",
+        "suspect_at_large",
     ]
     for _, row in incidents_df.iterrows():
         with conn.cursor() as cur:
