@@ -61,7 +61,7 @@ spec:
 
           containers:
             - name: scraper
-              image: registry.digitalocean.com/uwalerts/uw-alerts-scraper:27ee668
+              image: registry.digitalocean.com/uwalerts/uw-alerts-scraper:cec6ed4
               imagePullPolicy: IfNotPresent
 
               env:
