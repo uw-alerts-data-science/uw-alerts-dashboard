@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - feat/integrate-fast-api
+      - main
     paths:
       - "scraper/**"
       - "data/**"
