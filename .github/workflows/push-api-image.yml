@@ -20,6 +20,7 @@ permissions:
 jobs:
   build-and-push-api:
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - name: Check out repository
@@ -58,3 +59,20 @@ jobs:
         run: |
           echo "API image:"
           echo "registry.digitalocean.com/uwalerts/uw-alerts-api:${{ steps.image.outputs.tag }}"
+
+      # Deploy step. This only rolls out the new API image — it never touches
+      # k8s/jobs/ (schema apply, backfill), which stay manual/on-demand only.
+      - name: Configure kubectl for the cluster
+        run: doctl kubernetes cluster kubeconfig save "${{ vars.DOKS_CLUSTER_NAME }}"
+
+      - name: Apply manifests and roll out the new image
+        run: |
+          # Apply first, so probe/resource/replica changes in k8s/app/ are
+          # picked up (kubectl set image ONLY changes the image, nothing else).
+          # This also re-applies postgres.yaml — harmless: an unchanged
+          # StatefulSet spec is a no-op and never restarts or touches data.
+          kubectl apply -f k8s/app/
+          kubectl set image deployment/api \
+            api="registry.digitalocean.com/uwalerts/uw-alerts-api:${{ steps.image.outputs.tag }}" \
+            -n uw-alerts
+          kubectl rollout status deployment/api -n uw-alerts --timeout=120s

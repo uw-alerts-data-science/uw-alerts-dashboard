@@ -1,0 +1,42 @@
+# On-demand schema apply/migration.
+#
+# ┌─ This directory (k8s/jobs/) holds MANUAL, on-demand Jobs. No CI workflow
+# │  applies or creates anything here — deploys only touch k8s/app/. Schema
+# │  changes are deliberately NOT automated: only a human running
+# │  `kubectl create` against this file applies schema.sql to the live DB.
+# └─ Do NOT `kubectl apply` a generateName resource — it requires `create`.
+#
+# Safe to re-run against an already-initialized DB: scraper/db/schema.sql is
+# idempotent (CREATE TABLE IF NOT EXISTS ...) — this never drops or wipes
+# existing tables/data. Use this after a schema.sql change, or once when
+# standing up a brand-new (empty) Postgres volume.
+#
+# Reuses the API image (it already contains the `scraper` package + psycopg2).
+# schema.py exposes apply_schema() but has no __main__ block, so we call it
+# directly with `python -c` rather than `python -m`.
+#
+# HOW TO RUN (note: `create`, NOT `apply`):
+#   kubectl create -f k8s/jobs/apply-schema-job.yaml
+#   kubectl get jobs -n uw-alerts
+#   kubectl logs -f -l job-name -n uw-alerts        # or: kubectl logs -f job/<generated-name>
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: uw-apply-schema-
+  namespace: uw-alerts
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400   # auto-delete the finished Job after 1 day
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: apply-schema
+          image: registry.digitalocean.com/uwalerts/uw-alerts-api:latest
+          command:
+            - python
+            - -c
+            - "from scraper.db.schema import apply_schema; apply_schema()"
+          envFrom:
+            - secretRef:
+                name: uw-alerts-secrets   # needs DATABASE_URL

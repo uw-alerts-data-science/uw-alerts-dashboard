@@ -1,20 +1,22 @@
 # On-demand FULL database refresh (bulk backfill).
 #
-# ┌─ This directory (k8s/jobs/) holds MANUAL, on-demand Jobs. The deploy workflow
-# │  does NOT apply it (it only sweeps k8s/app/ and k8s/db/). Run these by hand.
+# ┌─ This directory (k8s/jobs/) holds MANUAL, on-demand Jobs. No CI workflow
+# │  applies or creates anything here — deploys only touch k8s/app/. Schema
+# │  changes and full-history backfills are deliberately NOT automated: only
+# │  a human running `kubectl create` against this file can wipe/redo them.
 # └─ Do NOT `kubectl apply` a generateName resource — it requires `create`.
 #
 # Runs `scraper.scripts.batch_history` once to completion — the heavy, parallel scrape
 # of all blog pages. This is the manual "full refresh"; the every-6h incremental
 # run is the separate CronJob (k8s/app/scraper-cronjob.yaml).
 #
-# Reuses the API image with an overridden command. `envFrom` pulls in DATABASE_URL
-# + the scraper API keys.
+# Reuses the scraper image with an overridden command. Needs both Secrets:
+# uw-alerts-secrets (DATABASE_URL) and uw-alerts-scraper-secrets (the API keys).
 #
 # HOW TO RUN (note: `create`, NOT `apply`):
 #   kubectl create -f k8s/jobs/backfill-job.yaml
-#   kubectl get jobs -n uwalerts
-#   kubectl logs -f -l job-name -n uwalerts        # or: kubectl logs -f job/<generated-name>
+#   kubectl get jobs -n uw-alerts
+#   kubectl logs -f -l job-name -n uw-alerts        # or: kubectl logs -f job/<generated-name>
 #
 # `generateName` gives every run a unique name (uw-backfill-abc12), so you can
 # re-run anytime without deleting the previous Job. `apply` doesn't support
@@ -26,7 +28,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   generateName: uw-backfill-
-  namespace: uwalerts
+  namespace: uw-alerts
 spec:
   backoffLimit: 1                  # don't retry a big scrape endlessly on failure
   ttlSecondsAfterFinished: 86400   # auto-delete the finished Job after 1 day
@@ -35,11 +37,13 @@ spec:
       restartPolicy: Never
       containers:
         - name: backfill
-          image: registry.digitalocean.com/uwalerts/api:latest
-          command: ["uv", "run", "python", "-m", "scraper.scripts.batch_history"]
+          image: registry.digitalocean.com/uwalerts/uw-alerts-scraper:latest
+          command: ["python", "-m", "scraper.scripts.batch_history"]
           envFrom:
             - secretRef:
-                name: uwalerts-secrets
+                name: uw-alerts-secrets
+            - secretRef:
+                name: uw-alerts-scraper-secrets
           env:
             # batch_history defaults to 50 parallel workers — gentler on the
             # single-node cluster + external APIs. Tune up if it's too slow.

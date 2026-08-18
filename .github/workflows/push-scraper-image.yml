@@ -20,6 +20,7 @@ permissions:
 jobs:
   build-and-push-scraper:
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - name: Check out repository
@@ -52,3 +53,17 @@ jobs:
             registry.digitalocean.com/uwalerts/uw-alerts-scraper:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Configure kubectl for the cluster
+        run: doctl kubernetes cluster kubeconfig save "${{ vars.DOKS_CLUSTER_NAME }}"
+
+      # This only updates the CronJob's image reference for its NEXT scheduled
+      # run (every 6h, incremental upsert only) — a CronJob has no active pod
+      # to roll out immediately. It never runs a backfill or schema change;
+      # those stay manual-only via k8s/jobs/ (see README).
+      - name: Apply manifests and point the CronJob at the new image
+        run: |
+          kubectl apply -f k8s/app/
+          kubectl set image cronjob/uw-alerts-scraper \
+            scraper="registry.digitalocean.com/uwalerts/uw-alerts-scraper:${{ steps.image.outputs.tag }}" \
+            -n uw-alerts

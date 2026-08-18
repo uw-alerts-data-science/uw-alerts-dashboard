@@ -8,7 +8,7 @@ A public civic tool that surfaces University of Washington campus safety alerts 
 
 ## Current State
 
-- **Scraper** (`scraper/`) — Claude-powered agentic scraper polling `emergency.uw.edu` every 15 min, writing normalized incident data to PostgreSQL. Runs as a Kubernetes CronJob in production.
+- **Scraper** (`scraper/`) — Claude-powered agentic scraper polling `emergency.uw.edu` every 6 hours, writing normalized incident data to PostgreSQL. Runs as a Kubernetes CronJob in production.
 - **API** (`app/`) — FastAPI backend reading from PostgreSQL, serving map-ready incidents and ad-hoc query routes.
 - **Frontend** (`frontend/`) — Next.js + MapLibre GL live alert view, consuming the FastAPI backend.
 
@@ -20,7 +20,7 @@ A public civic tool that surfaces University of Washington campus safety alerts 
 emergency.uw.edu
       │
       ▼
-scraper/ (Claude tool-use — Kubernetes CronJob, every 15 min)
+scraper/ (Claude tool-use — Kubernetes CronJob, every 6 hours)
       │
       ▼
 PostgreSQL
@@ -86,7 +86,35 @@ Poe tasks (`uv run poe --help`) are the layer `make` wraps for container/DB mana
 
 ## Scraper Service
 
-The `scraper/` directory contains a Claude-powered agent that polls `emergency.uw.edu` and maintains a normalized PostgreSQL database. It is designed to run as a Kubernetes CronJob every 15 minutes; `make scraper` runs it once locally against the compose stack.
+The `scraper/` directory contains a Claude-powered agent that polls `emergency.uw.edu` and maintains a normalized PostgreSQL database. It is designed to run as a Kubernetes CronJob every 6 hours; `make scraper` runs it once locally against the compose stack.
+
+## Deployment
+
+Production runs on a DigitalOcean Kubernetes cluster (`uw-alerts-v2`), all in namespace `uw-alerts`:
+
+- `api` — Deployment running the FastAPI backend
+- `frontend` — Deployment running the Next.js app
+- `postgres` — StatefulSet, self-hosted, backed by a `do-block-storage` PersistentVolumeClaim
+- `uw-alerts-scraper` — CronJob, runs the incremental scrape every 6 hours
+
+**CI/CD:** `.github/workflows/push-{api,frontend,scraper}-image.yml` each build and push their image to the DigitalOcean Container Registry, then `kubectl apply -f k8s/app/` (picks up any manifest changes — probes, resources, replicas, schedule) followed by `kubectl set image` to roll out the tag that was just built. Each triggers on push to `main` (path-filtered to its own directory) or manually via `workflow_dispatch`.
+
+**Postgres is fully decoupled from deploys.** Rolling out a new API/frontend/scraper image never touches the database, restarts it, or changes its data — the StatefulSet + PVC persist independently of every other workload. There is no automatic schema migration or reseed anywhere in CI/CD.
+
+**Schema changes and full-history backfills are manual, on-demand actions only.** `k8s/jobs/` holds Jobs that no workflow ever applies or creates — a human has to run them explicitly:
+
+```bash
+# Apply/re-apply the schema (idempotent: CREATE TABLE IF NOT EXISTS, never drops data)
+kubectl create -f k8s/jobs/apply-schema-job.yaml
+
+# Full-history backfill (idempotent: dedupes on text_hash, never duplicates)
+kubectl create -f k8s/jobs/backfill-job.yaml
+
+kubectl get jobs -n uw-alerts
+kubectl logs -f -l job-name -n uw-alerts   # or: kubectl logs -f job/<generated-name>
+```
+
+Nothing wipes or reseeds the database automatically. To wipe it or redo the backfill, someone has to trigger that themselves.
 
 ## Testing
 
@@ -138,7 +166,10 @@ data/
 docker-compose.yml / docker-compose.override.yml   # postgres + api + frontend (+ scraper, profile "jobs")
 Dockerfile                          # Production API image
 docker/scraper.Dockerfile           # Scraper image
-k8s/                                 # Kubernetes manifests (DigitalOcean cluster)
+k8s/
+  app/                               # Applied by CI on every deploy (api, frontend, postgres, scraper CronJob, ingress)
+  jobs/                              # NEVER applied by CI — manual-only (schema apply, full backfill)
+  cluster/                           # Ingress-nginx / cert-manager cluster add-ons
 
 docs/                               # Project planning and specs
 

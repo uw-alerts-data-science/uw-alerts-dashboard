@@ -111,7 +111,8 @@ data/
 docker-compose.yml / docker-compose.override.yml   # postgres + api + frontend (+ scraper, profile "jobs")
 Dockerfile                    # Production API image (built from app/ + pyproject.toml/uv.lock)
 docker/scraper.Dockerfile     # Scraper image
-k8s/                           # Kubernetes manifests (DigitalOcean cluster) for api, frontend, db, scraper CronJob
+k8s/app/                       # Applied by CI on every deploy: api, frontend, postgres, scraper CronJob, ingress
+k8s/jobs/                      # NEVER applied by CI — manual-only Jobs (schema apply, full backfill)
 ```
 
 ## Data flow
@@ -134,6 +135,12 @@ k8s/                           # Kubernetes manifests (DigitalOcean cluster) for
 ## Database schema
 
 Two tables: `incidents` (one row per physical event, holds geocoded location and category) and `alerts` (one row per blog post — original + updates — with a `text_hash` unique constraint for deduplication). `app/main.py` and `scraper/tools/database.py` both query these directly via `psycopg2`.
+
+## Deployment
+
+Production: DigitalOcean Kubernetes cluster `uw-alerts-v2`, namespace `uw-alerts`. `.github/workflows/push-{api,frontend,scraper}-image.yml` build+push each image on push to `main` (path-filtered) or `workflow_dispatch`, then `kubectl apply -f k8s/app/` + `kubectl set image` roll out the new tag.
+
+Postgres (`postgres` StatefulSet + PVC, `k8s/app/postgres.yaml`) is fully decoupled from all three deploy workflows — an image rollout never touches it. **Schema apply and full-history backfill are manual-only**: `k8s/jobs/apply-schema-job.yaml` and `k8s/jobs/backfill-job.yaml` are never applied by CI; a human runs `kubectl create -f <file>` deliberately. There is no automatic wipe or reseed anywhere — see the README's Deployment section for the exact commands.
 
 ## Notes
 
