@@ -44,6 +44,7 @@ def test_wait_succeeds_immediately():
     with patch("scraper.db.wait.psycopg2.connect") as mock_connect:
         mock_connect.return_value = MagicMock()
         from scraper.db.wait import wait_for_postgres
+
         wait_for_postgres(url="postgres://localhost/test", interval=0)
         mock_connect.assert_called_once_with("postgres://localhost/test")
 
@@ -56,6 +57,7 @@ def test_wait_retries_then_succeeds():
             MagicMock(),
         ]
         from scraper.db.wait import wait_for_postgres
+
         wait_for_postgres(url="postgres://localhost/test", interval=0)
         assert mock_connect.call_count == 3
 
@@ -64,6 +66,7 @@ def test_wait_raises_timeout():
     with patch("scraper.db.wait.psycopg2.connect") as mock_connect:
         mock_connect.side_effect = psycopg2.OperationalError()
         from scraper.db.wait import wait_for_postgres
+
         with pytest.raises(TimeoutError, match="not ready after"):
             wait_for_postgres(url="postgres://localhost/test", timeout=0.05, interval=0)
 ```
@@ -152,7 +155,10 @@ def test_db():
 
 def test_apply_schema_creates_tables(test_db):
     from scraper.db.schema import apply_schema
-    apply_schema(url=os.environ.get("TEST_DATABASE_URL", "postgres://localhost/uw_alerts_test"))
+
+    apply_schema(
+        url=os.environ.get("TEST_DATABASE_URL", "postgres://localhost/uw_alerts_test")
+    )
     with test_db.cursor() as cur:
         cur.execute(
             "SELECT table_name FROM information_schema.tables "
@@ -164,6 +170,7 @@ def test_apply_schema_creates_tables(test_db):
 
 def test_apply_schema_is_idempotent(test_db):
     from scraper.db.schema import apply_schema
+
     url = os.environ.get("TEST_DATABASE_URL", "postgres://localhost/uw_alerts_test")
     # Second call must not raise
     apply_schema(url=url)

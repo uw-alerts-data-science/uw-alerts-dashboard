@@ -5,6 +5,8 @@ connection and monkeypatch the DB helpers, so the suite runs in CI without a
 live Postgres (mirroring `poe test-scraper`).
 """
 
+from unittest.mock import MagicMock
+
 from fastapi.testclient import TestClient
 
 import app.main as main
@@ -14,8 +16,10 @@ client = TestClient(app)
 
 
 def _fake_db():
-    """Stand-in for get_db: yields a sentinel connection, never touches Postgres."""
-    yield object()
+    """Stand-in for get_db: yields a mock connection, never touches Postgres."""
+    conn = MagicMock()
+    conn.cursor.return_value.__enter__.return_value.fetchone.return_value = (1,)
+    yield conn
 
 
 def test_health():
