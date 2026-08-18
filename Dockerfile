@@ -1,22 +1,31 @@
+FROM python:3.12-slim-bookworm AS builder
 
-FROM python:3.12-slim-bookworm
-
-# Copy the uv binary from the official distroless Docker image
-COPY --from=ghcr.io/astral-sh/uv@sha256:eb2843a1e56fd9e30c7276ce1a52cba86e64c7b385f5e3279a0e08e02dd058fc /uv /uvx /bin/
-
-# Copy the project into the image
-COPY . /app
-# Copy lock files first for optimal caching
-COPY pyproject.toml uv.lock /app/
-
-# Disable development dependencies
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 ENV UV_NO_DEV=1
 
-# Sync the project into a new environment, asserting the lockfile is up to date
+COPY --from=ghcr.io/astral-sh/uv@sha256:eb2843a1e56fd9e30c7276ce1a52cba86e64c7b385f5e3279a0e08e02dd058fc \
+    /uv /uvx /bin/
+
 WORKDIR /app
 
-# Sync dependencies using --frozen instead of --locked
+COPY pyproject.toml uv.lock ./
+
 RUN uv sync --frozen --no-dev --no-install-project
 
+
+FROM python:3.12-slim-bookworm AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/app/.venv/bin:$PATH"
+
+WORKDIR /app
+
+COPY --from=builder /app/.venv /app/.venv
+
+COPY . /app/
+
 EXPOSE 8000
-CMD ["uv", "run", "fastapi", "run", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]
+
+CMD ["fastapi", "run", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]

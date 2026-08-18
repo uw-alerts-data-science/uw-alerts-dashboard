@@ -5,30 +5,69 @@
 # completion on a schedule. A Deployment would be WRONG — it would keep
 # restarting the finished process forever.
 #
-# We reuse the API image and override the command (same trick as the schema Job).
-# The root Dockerfile bakes the whole repo, so `-m scraper.agent` works;
+# This ONLY does the every-6h incremental poll — it upserts new/changed
+# alerts, never wipes or reseeds the DB. A full history backfill or a schema
+# change is a separate, manual action (see k8s/jobs/), never triggered by
+# this CronJob or by deploying a new image.
+#
+# The image tag below is a placeholder — the push-scraper-image.yml workflow
+# runs `kubectl set image` to the real just-built tag on every deploy.
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  name: scraper
-  namespace: uwalerts
+  name: uw-alerts-scraper
+  namespace: uw-alerts
+
 spec:
-  schedule: "0 */6 * * *"        # every 6 hours, on the hour. NOTE: cluster time is UTC.
-  concurrencyPolicy: Forbid      # if a run overruns 6h, don't start a second one on top
-  successfulJobsHistoryLimit: 3  # keep the last 3 successful jobs for `kubectl logs`
+  schedule: "0 */6 * * *"
+  concurrencyPolicy: Forbid
+
+  successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
+
   jobTemplate:
     spec:
-      backoffLimit: 2
+      backoffLimit: 1
+
       template:
+        metadata:
+          labels:
+            app: scraper
+
         spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never
+
           containers:
             - name: scraper
-              image: registry.digitalocean.com/uwalerts/api:latest
-              command: ["uv", "run", "python", "-m", "scraper.agent"]
-              envFrom:
-                # The scraper needs ALL keys: DATABASE_URL + GOOGLE_MAPS_API_KEY +
-                # ANTHROPIC_API_KEY (or the USE_AZURE + AZURE_* trio).
-                - secretRef:
-                    name: uwalerts-secrets
+              image: registry.digitalocean.com/uwalerts/uw-alerts-scraper:latest
+              imagePullPolicy: IfNotPresent
+
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: uw-alerts-secrets
+                      key: DATABASE_URL
+
+                - name: GOOGLE_MAPS_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: uw-alerts-scraper-secrets
+                      key: GOOGLE_MAPS_API_KEY
+
+                - name: ANTHROPIC_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: uw-alerts-scraper-secrets
+                      key: ANTHROPIC_API_KEY
+
+                - name: DRY_RUN
+                  value: "false"
+
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi

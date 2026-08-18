@@ -1,0 +1,76 @@
+# The image tag below is a placeholder — push-frontend-image.yml runs
+# `kubectl set image` to the real just-built tag on every deploy.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: uw-alerts
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: frontend
+
+  template:
+    metadata:
+      labels:
+        app: frontend
+
+    spec:
+      containers:
+        - name: frontend
+          image: registry.digitalocean.com/uwalerts/uw-alerts-frontend:latest
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 3000
+
+          startupProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: 5
+            failureThreshold: 30
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: 10
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            periodSeconds: 20
+            failureThreshold: 5
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: uw-alerts
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: frontend
+
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000

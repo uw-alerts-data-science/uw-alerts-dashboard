@@ -1,0 +1,41 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: uw-alerts
+  namespace: uw-alerts
+
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+spec:
+  ingressClassName: nginx
+
+  tls:
+    - hosts:
+        - uwalerts.live
+        - api.uwalerts.live
+      secretName: uw-alerts-tls
+
+  rules:
+    - host: uwalerts.live
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000
+
+    - host: api.uwalerts.live
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 8000

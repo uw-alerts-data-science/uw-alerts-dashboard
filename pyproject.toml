@@ -7,7 +7,7 @@ name = "uw-alert-web"
 version = "1.0"
 description = "Visualize incidents/announcements from the UW Alert system"
 license = { text = "MIT" }
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.139.2",
     "anthropic>=0.36.0",
@@ -26,7 +26,6 @@ dev = [
     "ruff>=0.5",
     "poethepoet>=0.27",
     "pytest>=8.0",
-    "pytest-mock>=3.12",
     "responses>=0.25",
     "pre-commit>=3.7",
 ]

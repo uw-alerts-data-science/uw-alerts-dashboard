@@ -1,0 +1,69 @@
+name: Build and Push Scraper Image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "scraper/**"
+      - "data/**"
+      - "docker/scraper.Dockerfile"
+      - ".dockerignore"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/push-scraper-image.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-push-scraper:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install and authenticate doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DigitalOcean Container Registry
+        run: doctl registries login uwalerts --expiry-seconds 1200
+
+      - name: Generate short image tag
+        id: image
+        shell: bash
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push scraper image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./docker/scraper.Dockerfile
+          push: true
+          tags: |
+            registry.digitalocean.com/uwalerts/uw-alerts-scraper:${{ steps.image.outputs.tag }}
+            registry.digitalocean.com/uwalerts/uw-alerts-scraper:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Configure kubectl for the cluster
+        run: doctl kubernetes cluster kubeconfig save "${{ vars.DOKS_CLUSTER_NAME }}"
+
+      # This only updates the CronJob's image reference for its NEXT scheduled
+      # run (every 6h, incremental upsert only) — a CronJob has no active pod
+      # to roll out immediately. It never runs a backfill or schema change;
+      # those stay manual-only via k8s/jobs/ (see README).
+      - name: Apply manifests and point the CronJob at the new image
+        run: |
+          kubectl apply -f k8s/app/
+          kubectl set image cronjob/uw-alerts-scraper \
+            scraper="registry.digitalocean.com/uwalerts/uw-alerts-scraper:${{ steps.image.outputs.tag }}" \
+            -n uw-alerts

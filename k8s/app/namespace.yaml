@@ -1,10 +1,4 @@
-# A Namespace is a folder *inside* the cluster. Everything for this app lives in
-# `uwalerts`, so `kubectl get all -n uwalerts` shows only your stuff, and you can
-# tear the whole app down with `kubectl delete namespace uwalerts`.
-#
-# IMPORTANT: a Service and the Ingress that points at it must be in the SAME
-# namespace. Every manifest in this repo sets `namespace: uwalerts` for that reason.
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: uwalerts
+  name: uw-alerts
