@@ -4,20 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A Flask web application that visualizes University of Washington campus safety alerts on an interactive map. A Claude-based agentic scraper fetches alerts, geocodes them via Google Maps, and stores them to PostgreSQL. The Flask app queries Postgres and renders incidents as a Folium map with heatmap overlays.
+A civic tool that visualizes University of Washington campus safety alerts on an interactive map. A Claude-based agentic scraper fetches alerts, geocodes them via Google Maps, and stores them to PostgreSQL. A FastAPI backend (`app/`) queries Postgres and serves JSON to a Next.js + MapLibre GL frontend (`frontend/`).
 
 ## Environment Setup
 
 ```bash
-uv sync       # installs all dependencies including dev tools
+uv sync       # installs all Python dependencies (app + scraper) including dev tools
 ```
 
 Requires a `.env` file in the root directory. Copy `.env.example` and fill in your values:
 ```
-# Web app
-OPENAI_API_KEY='...'
+# API (app/)
 GOOGLE_MAPS_API_KEY='...'
-MAPBOX_API_KEY='...'
 DATABASE_URL='...'
 
 # Scraper (direct Anthropic)
@@ -38,16 +36,24 @@ ANTHROPIC_SONNET_MODEL='...'
 
 ## Commands
 
-```bash
-# Web app
-cd uw-alert-web && uv run flask --app=uw-alert-web run   # http://127.0.0.1:5000
+Full-stack local dev goes through `make` (wraps `docker compose` and `poe` under the hood — see `make help` for the complete list):
 
+```bash
+make up         # Build and start postgres + api + frontend (docker compose up --build)
+make setup      # Postgres up + schema applied + seed from data/snapshot/ + git hooks installed
+make dev        # setup, then tail the API container's logs
+make down       # Stop all containers (keeps the postgres_data volume)
+make scraper    # Run the scraper once against the compose stack (profile: jobs)
+```
+
+```bash
 # Tests
-uv run poe test           # web app tests with coverage
-uv run poe test-scraper   # scraper tests (pytest)
+uv run poe test           # app + scraper tests with coverage
+uv run poe test-scraper   # scraper-only tests (no DB required)
+make test-scraper-full    # all scraper tests including DB tests (requires `make setup` first)
 
 # Single test file
-cd uw-alert-web && uv run python -m unittest tests/test_parse_uw_alerts.py
+uv run python -m pytest app/tests/test_main.py -v
 pytest scraper/tests/test_agent.py -v
 
 # Lint / format
@@ -56,6 +62,7 @@ uv run poe lint           # check only, no writes
 
 # Scraper (dry run — no DB writes)
 DRY_RUN=true python -m scraper.agent
+make dry-run               # same, via the Makefile (sources .env first)
 
 # CSV → Postgres migration (one-time)
 python -m scraper.db.migrate
@@ -66,7 +73,16 @@ CI runs on Python 3.12 using uv, matching the production Docker image. Ruff conf
 ## Architecture
 
 ```
-scraper/                      # Agentic scraper (runs independently of Flask)
+app/                           # FastAPI backend (serves the frontend + ad-hoc query routes)
+  main.py                       # Routes: /health, /query/incidents/recent, /query/incidents/search, /api/alerts
+  tests/
+
+frontend/                      # Next.js + MapLibre GL app
+  src/app/                      # Pages (incl. src/app/recent/)
+  src/components/
+  src/lib/
+
+scraper/                      # Agentic scraper (runs independently of app/)
   agent.py                     # Thin entry point — delegates to live_discovery.run_live_discovery()
   live_discovery.py            # Live incremental scrape: page-walk discovery + per-article agent loop
   config.py                   # Env loading; Anthropic client factory (direct or Azure)
@@ -80,33 +96,27 @@ scraper/                      # Agentic scraper (runs independently of Flask)
   tools/
     scrape.py                 # BeautifulSoup fetch of UW Alerts blog (scrape_page, scrape_article_urls, scrape_article)
     geocode.py                # Google Maps geocoding
-    database.py               # query_recent_incidents, upsert_alert, known_source_urls, find_incident_id_by_source_url (Postgres)
+    database.py                # query_recent_incidents, upsert_alert, known_source_urls, find_incident_id_by_source_url (Postgres)
   db/
     models.py                  # Pydantic contract mirroring schema.sql (IncidentCategory, AlertType, etc.)
+    schema.py / wait.py        # Schema application + Postgres readiness polling (used by `make setup`)
     migrate.py                # One-time CSV → Postgres migration
   tests/                      # pytest-based tests for all scraper modules
 
-uw-alert-web/
-  uw-alert-web.py             # Flask routes — no business logic
-  db.py                       # query_incidents_as_dataframe() — reads from Postgres
-  parse_uw_alerts/
-    parse_uw_alerts.py        # Legacy GPT parser + scraper (kept for /fully_update route)
-  visualization_manager/
-    visualization_manager.py  # Folium map generation, marker attachment, heatmap
-    process_seattle_streets.py # GeoDataFrame for Seattle street overlay
-  tests/                      # unittest-based tests
-
 data/
-  uw_alerts_clean.csv         # Legacy primary store — still used by /fully_update route
+  uw_alerts_clean.csv         # Legacy source data (retained for historical migration provenance)
+  snapshot/                   # CSV snapshot used to seed a fresh dev DB (`make setup` / `poe db-seed`)
   SeattleGISData/             # Seattle street GIS shapefiles
 
-templates/                    # Jinja2 HTML templates (home, demo, past, about)
-static/                       # CSS and images
+docker-compose.yml / docker-compose.override.yml   # postgres + api + frontend (+ scraper, profile "jobs")
+Dockerfile                    # Production API image (built from app/ + pyproject.toml/uv.lock)
+docker/scraper.Dockerfile     # Scraper image
+k8s/                           # Kubernetes manifests (DigitalOcean cluster) for api, frontend, db, scraper CronJob
 ```
 
 ## Data flow
 
-**Scraper agent** (runs on a schedule, independent of Flask):
+**Scraper agent** (runs on a schedule, independent of the API):
 1. `_discover_urls_to_process()` walks blog listing pages newest-first via `scrape_article_urls()`, expanding only while every URL on a page is unseen (checked deterministically via `known_source_urls()`); stops expanding once a page has a known URL, capped at `max_pages` with a warning logged if the cap is hit while still all-new.
 2. For every article URL in that range, `_process_live_article()` looks up `find_incident_id_by_source_url()` — a plain SQL fact, not an LLM judgment call — and tells Claude upfront whether this is a brand-new incident or an update to a known one.
 3. Claude parses the article into blocks and calls `geocode_address()`/`upsert_alert()` per block, looping until `end_turn` (not stopping after the first write) — so a multi-block article or a burst of several new incidents in one poll are all captured, not just the first one.
@@ -114,23 +124,18 @@ static/                       # CSS and images
 5. Zero new alerts for an article is a normal outcome, not an error — most articles on a given cycle will already be fully recorded.
 6. `DRY_RUN=true` skips all DB writes for safe testing.
 
-**Flask app** (reads from Postgres; falls back to legacy CSV path for `/fully_update`):
-1. Routes call `db.query_incidents_as_dataframe(hours=N)` for recent alerts
-2. Result is passed to `get_folium_map()` + `attach_marker_ids()` in `visualization_manager`
-3. Rendered map HTML is passed directly to Jinja2 templates via `map_html=`
+**FastAPI backend** (`app/main.py`, reads from Postgres):
+1. `/api/alerts` — map-ready incidents (optionally filtered to alerts scraped in the last `hours`), consumed by the Next.js frontend.
+2. `/query/incidents/recent` / `/query/incidents/search` — ad-hoc query helpers over `scraper.tools.database`.
+3. `/health` — verifies DB connectivity.
 
-**Key routes:**
-- `/` — last 7 days of alerts (Postgres)
-- `/demo` — last 24 h with custom text input (Postgres)
-- `/past` — all historical alerts (Postgres)
-- `/fully_update` — triggers live scrape using the legacy OpenAI parser, writes to CSV
+**Frontend** (`frontend/`, Next.js + MapLibre GL): fetches from the FastAPI backend and renders incidents on an interactive map.
 
 ## Database schema
 
-Two tables: `incidents` (one row per physical event, holds geocoded location and category) and `alerts` (one row per blog post — original + updates — with a `text_hash` unique constraint for deduplication). `db.py` joins them and returns a DataFrame shaped to match the visualization manager's column expectations.
+Two tables: `incidents` (one row per physical event, holds geocoded location and category) and `alerts` (one row per blog post — original + updates — with a `text_hash` unique constraint for deduplication). `app/main.py` and `scraper/tools/database.py` both query these directly via `psycopg2`.
 
 ## Notes
 
-- The `uw-alert-web/` directory is both a Python package and the Flask app root; use relative imports (`.visualization_manager...`) inside it.
 - The scraper defaults to `claude-haiku-4-5-20251001`; override via `ANTHROPIC_HAIKU_MODEL`.
-- `geometry` in the legacy CSV stores Python list literals; loaded with `converters={'geometry': ast.literal_eval}`. The Postgres path returns a plain `{"location": {"lat": ..., "lng": ...}}` dict to preserve the same shape.
+- Local Postgres runs in Docker (`postgres:15`) via `docker-compose.yml`; inside the compose network, containers reach it at `postgres:5432`, while host tools (psql, a locally-run scraper) use `localhost:5432`.
