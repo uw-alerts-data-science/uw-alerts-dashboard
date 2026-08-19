@@ -141,6 +141,40 @@ def test_run_batch_agent_returns_error_on_api_failure(mock_get_client):
     assert result["status"] == "error"
 
 
+@patch(
+    "scraper.scripts.batch_history.upsert_alert",
+    side_effect=Exception("insert or update on table violates foreign key constraint"),
+)
+@patch("scraper.scripts.batch_history.get_anthropic_client")
+def test_run_batch_agent_rolls_back_connection_on_upsert_error(
+    mock_get_client, mock_upsert
+):
+    """A DB error from upsert_alert must not leave the shared connection poisoned.
+
+    Workers reuse one connection serially across many articles (see
+    _process_batch_worker); an unrolled-back transaction fails every
+    subsequent query on that connection with "current transaction is
+    aborted" until the connection is closed.
+    """
+    mock_get_client.return_value.messages.create.side_effect = [
+        _tool_response(
+            "upsert_alert",
+            {
+                "alert_type": "original",
+                "full_text": "Theft near HUB.",
+                "raw_scraped_text": "Theft near HUB.",
+            },
+        ),
+        _end_turn_response(),
+    ]
+    from scraper.scripts.batch_history import run_batch_agent
+
+    conn = MagicMock()
+    result = run_batch_agent(SAMPLE_ARTICLE, CONFIG, conn)
+    assert result["status"] == "error"
+    conn.rollback.assert_called_once()
+
+
 @patch("scraper.scripts.batch_history.get_anthropic_client")
 def test_run_batch_agent_dry_run_skips_write(mock_get_client, monkeypatch):
     monkeypatch.setenv("DRY_RUN", "true")

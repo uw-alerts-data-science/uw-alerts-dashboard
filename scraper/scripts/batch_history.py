@@ -237,6 +237,10 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
 
     except Exception as e:
         logger.error("batch_agent_error", extra={"error": str(e)})
+        try:
+            db_conn.rollback()
+        except Exception:
+            pass
         return {
             "status": "error",
             "error": str(e),

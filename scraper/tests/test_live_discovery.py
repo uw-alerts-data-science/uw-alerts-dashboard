@@ -281,6 +281,48 @@ def test_process_live_article_malformed_upsert_returns_error(
     assert "UPDATE" not in calls_str
 
 
+@patch(
+    "scraper.live_discovery.upsert_alert",
+    side_effect=Exception("insert or update on table violates foreign key constraint"),
+)
+@patch("scraper.live_discovery.find_incident_id_by_source_url", return_value=None)
+@patch("scraper.live_discovery.scrape_article")
+@patch("scraper.live_discovery.get_anthropic_client")
+def test_process_live_article_rolls_back_connection_on_upsert_error(
+    mock_get_client, mock_scrape, mock_find, mock_upsert
+):
+    """A DB error from upsert_alert must not leave the shared connection poisoned.
+
+    run_live_discovery reuses one connection serially across every article in
+    a cycle; an unrolled-back transaction fails every subsequent query on
+    that connection with "current transaction is aborted" for the rest of
+    the cycle.
+    """
+    mock_scrape.return_value = {
+        "raw_text": "ORIGINAL POST: Robbery near Red Square.",
+        "article_url": "https://emergency.uw.edu/new/",
+        "scraped_at": "2026-01-01T00:00:00+00:00",
+    }
+    mock_get_client.return_value.messages.create.side_effect = [
+        _tool_response(
+            "upsert_alert",
+            {
+                "is_new_incident": True,
+                "alert_type": "original",
+                "full_text": "ORIGINAL POST: Robbery near Red Square.",
+                "raw_scraped_text": "ORIGINAL POST: Robbery near Red Square.",
+            },
+        ),
+        _end_turn_response(),
+    ]
+    from scraper.live_discovery import _process_live_article
+
+    conn = MagicMock()
+    result = _process_live_article("https://emergency.uw.edu/new/", CONFIG_DIRECT, conn)
+    assert result["status"] == "error"
+    conn.rollback.assert_called_once()
+
+
 @patch("scraper.live_discovery.find_incident_id_by_source_url", return_value=None)
 @patch("scraper.live_discovery.scrape_article")
 def test_process_live_article_scrape_failure_returns_error(mock_scrape, mock_find):

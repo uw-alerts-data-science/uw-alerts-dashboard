@@ -301,6 +301,10 @@ def _process_live_article(url: str, config: dict, db_conn) -> dict:
 
     except Exception as e:
         logger.error("live_agent_error", extra={"url": url, "error": str(e)})
+        try:
+            db_conn.rollback()
+        except Exception:
+            pass
         return {
             "status": "error",
             "error": str(e),
