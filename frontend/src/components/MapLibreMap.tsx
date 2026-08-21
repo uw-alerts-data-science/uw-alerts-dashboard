@@ -587,7 +587,7 @@ export default function MapLibreMap({
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style:
-        "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json",
+        "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
       center: [-122.3035, 47.6553],
       zoom: historicalLayout ? 11.5 : 12,
     });
@@ -1150,13 +1150,13 @@ export default function MapLibreMap({
                         >
                           <stop
                             offset="0%"
-                            stopColor="#536b75"
+                            stopColor="#8f6bc7"
                             stopOpacity={0.22}
                           />
 
                           <stop
                             offset="100%"
-                            stopColor="#536b75"
+                            stopColor="#8f6bc7"
                             stopOpacity={0.02}
                           />
                         </linearGradient>
@@ -1164,7 +1164,7 @@ export default function MapLibreMap({
                     
                       <CartesianGrid
                         vertical={false}
-                        stroke="#e4e3de"
+                        stroke="#2a2235"
                         strokeDasharray="3 3"
                       />
 
@@ -1175,7 +1175,7 @@ export default function MapLibreMap({
                         interval={0}
                         minTickGap={8}
                         tick={{
-                          fill: "#758087",
+                          fill: "#85779e",
                           fontSize:
                             historicalTimelineMode === "yearly" ? 11 : 10,
                         }}
@@ -1187,21 +1187,21 @@ export default function MapLibreMap({
                         tickLine={false}
                         width={32}
                         tick={{
-                          fill: "#758087",
+                          fill: "#85779e",
                           fontSize: 10,
                         }}
                       />
 
                       <Tooltip
                         cursor={{
-                          stroke: "#9ca5aa",
+                          stroke: "#6f5a87",
                           strokeDasharray: "4 4",
                         }}
                         contentStyle={{
-                          border: "1px solid #d8dcd8",
+                          border: "1px solid #3a2c49",
                           borderRadius: "8px",
-                          background: "#ffffff",
-                          color: "#172026",
+                          background: "#17101f",
+                          color: "#f5efff",
                           fontSize: "12px",
                         }}
                         formatter={(value) => [
@@ -1223,18 +1223,18 @@ export default function MapLibreMap({
                       <Line
                         type="linear"
                         dataKey="count"
-                        stroke="#263b43"
+                        stroke="#9a72d8"
                         strokeWidth={2.5}
                         dot={{
                           r: 3,
-                          fill: "#d54432",
-                          stroke: "#ffffff",
-                          strokeWidth: 1.5,
+                          fill: "#e0ad57",
+                          stroke: "#17101f",
+                          strokeWidth: 2,
                         }}
                         activeDot={{
                           r: 5,
-                          fill: "#d54432",
-                          stroke: "#ffffff",
+                          fill: "#e0ad57",
+                          stroke: "#17101f",
                           strokeWidth: 2,
                         }}
                         isAnimationActive
