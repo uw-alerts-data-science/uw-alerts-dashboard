@@ -16,6 +16,7 @@ permissions:
 jobs:
   build-and-push-frontend:
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - name: Check out repository
@@ -50,3 +51,14 @@ jobs:
             registry.digitalocean.com/uwalerts/uw-alerts-frontend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Configure kubectl for the cluster
+        run: doctl kubernetes cluster kubeconfig save "${{ vars.DOKS_CLUSTER_NAME }}"
+
+      - name: Apply manifests and roll out the new image
+        run: |
+          kubectl apply -f k8s/app/
+          kubectl set image deployment/frontend \
+            frontend="registry.digitalocean.com/uwalerts/uw-alerts-frontend:${{ steps.image.outputs.tag }}" \
+            -n uw-alerts
+          kubectl rollout status deployment/frontend -n uw-alerts --timeout=120s

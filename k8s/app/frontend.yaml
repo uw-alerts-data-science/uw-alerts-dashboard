@@ -1,3 +1,5 @@
+# The image tag below is a placeholder — push-frontend-image.yml runs
+# `kubectl set image` to the real just-built tag on every deploy.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,7 +21,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: registry.digitalocean.com/uwalerts/uw-alerts-frontend:9975538
+          image: registry.digitalocean.com/uwalerts/uw-alerts-frontend:latest
           imagePullPolicy: IfNotPresent
 
           ports:

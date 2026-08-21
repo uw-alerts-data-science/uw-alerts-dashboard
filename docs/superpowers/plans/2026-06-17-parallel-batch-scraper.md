@@ -110,7 +110,10 @@ def test_scrape_article_returns_raw_text(mock_get):
 
 @patch("scraper.tools.scrape.requests.get")
 def test_scrape_article_raises_on_missing_article_element(mock_get):
-    mock_get.return_value = MagicMock(status_code=200, text="<html><body><main class='site-main'></main></body></html>")
+    mock_get.return_value = MagicMock(
+        status_code=200,
+        text="<html><body><main class='site-main'></main></body></html>",
+    )
     mock_get.return_value.raise_for_status = MagicMock()
     with pytest.raises(ScrapingError):
         scrape_article("https://emergency.uw.edu/2024/01/theft/")
@@ -157,7 +160,9 @@ def scrape_article_urls(page_num: int) -> list:
     for article in main.find_all("article"):
         if not article.find("time", class_="entry-date"):
             continue
-        title_el = article.find("h2", class_="entry-title") or article.find("h1", class_="entry-title")
+        title_el = article.find("h2", class_="entry-title") or article.find(
+            "h1", class_="entry-title"
+        )
         if title_el:
             a = title_el.find("a", href=True)
             if a:
@@ -296,12 +301,17 @@ Replace the `run_batch stats / page loop` section of `scraper/tests/test_batch_h
 ```python
 # ── _discover_article_urls ───────────────────────────────────────────────────
 
-@patch("scraper.batch_history.scrape_article_urls", return_value=[
-    "https://emergency.uw.edu/2024/01/theft/",
-    "https://emergency.uw.edu/2024/02/robbery/",
-])
+
+@patch(
+    "scraper.batch_history.scrape_article_urls",
+    return_value=[
+        "https://emergency.uw.edu/2024/01/theft/",
+        "https://emergency.uw.edu/2024/02/robbery/",
+    ],
+)
 def test_discover_article_urls_returns_flat_list(mock_scrape):
     from scraper.batch_history import _discover_article_urls
+
     urls = _discover_article_urls(start_page=2, end_page=1, max_pages=50)
     # 2 pages × 2 urls each = 4 urls
     assert len(urls) == 4
@@ -310,20 +320,36 @@ def test_discover_article_urls_returns_flat_list(mock_scrape):
 @patch("scraper.batch_history.scrape_article_urls", side_effect=Exception("timeout"))
 def test_discover_article_urls_skips_failed_pages(mock_scrape):
     from scraper.batch_history import _discover_article_urls
+
     urls = _discover_article_urls(start_page=2, end_page=1, max_pages=50)
     assert urls == []
 
 
 # ── _process_batch_worker ────────────────────────────────────────────────────
 
-@patch("scraper.batch_history.run_batch_agent", return_value={"status": "inserted", "incident_id": 1, "alert_id": 1})
-@patch("scraper.batch_history.scrape_article", return_value={
-    "raw_text": "Theft near HUB.", "article_url": "https://emergency.uw.edu/2024/01/theft/", "scraped_at": "2026-01-01T00:00:00+00:00"
-})
+
+@patch(
+    "scraper.batch_history.run_batch_agent",
+    return_value={"status": "inserted", "incident_id": 1, "alert_id": 1},
+)
+@patch(
+    "scraper.batch_history.scrape_article",
+    return_value={
+        "raw_text": "Theft near HUB.",
+        "article_url": "https://emergency.uw.edu/2024/01/theft/",
+        "scraped_at": "2026-01-01T00:00:00+00:00",
+    },
+)
 @patch("scraper.batch_history.psycopg2.connect")
-def test_process_batch_worker_calls_agent_for_each_url(mock_pg, mock_scrape, mock_agent):
+def test_process_batch_worker_calls_agent_for_each_url(
+    mock_pg, mock_scrape, mock_agent
+):
     from scraper.batch_history import _process_batch_worker
-    urls = ["https://emergency.uw.edu/2024/01/theft/", "https://emergency.uw.edu/2024/02/robbery/"]
+
+    urls = [
+        "https://emergency.uw.edu/2024/01/theft/",
+        "https://emergency.uw.edu/2024/02/robbery/",
+    ]
     results = _process_batch_worker(urls, CONFIG)
     assert mock_agent.call_count == 2
     assert all(r["status"] == "inserted" for r in results)
@@ -333,37 +359,55 @@ def test_process_batch_worker_calls_agent_for_each_url(mock_pg, mock_scrape, moc
 @patch("scraper.batch_history.psycopg2.connect")
 def test_process_batch_worker_records_scrape_error(mock_pg, mock_scrape):
     from scraper.batch_history import _process_batch_worker
+
     results = _process_batch_worker(["https://emergency.uw.edu/2024/01/theft/"], CONFIG)
     assert results[0]["status"] == "error"
 
 
 # ── run_batch ────────────────────────────────────────────────────────────────
 
-@patch("scraper.batch_history._process_batch_worker", return_value=[
-    {"status": "inserted", "incident_id": 1, "alert_id": 1},
-    {"status": "inserted", "incident_id": 2, "alert_id": 2},
-])
-@patch("scraper.batch_history._discover_article_urls", return_value=[
-    "https://emergency.uw.edu/a/", "https://emergency.uw.edu/b/",
-    "https://emergency.uw.edu/c/", "https://emergency.uw.edu/d/",
-])
+
+@patch(
+    "scraper.batch_history._process_batch_worker",
+    return_value=[
+        {"status": "inserted", "incident_id": 1, "alert_id": 1},
+        {"status": "inserted", "incident_id": 2, "alert_id": 2},
+    ],
+)
+@patch(
+    "scraper.batch_history._discover_article_urls",
+    return_value=[
+        "https://emergency.uw.edu/a/",
+        "https://emergency.uw.edu/b/",
+        "https://emergency.uw.edu/c/",
+        "https://emergency.uw.edu/d/",
+    ],
+)
 @patch("scraper.batch_history.psycopg2.connect")
 def test_run_batch_counts_inserted(mock_pg, mock_discover, mock_worker):
     mock_pg.return_value.cursor.return_value.__enter__.return_value.fetchall.return_value = []
     from scraper.batch_history import run_batch
+
     rc = run_batch(CONFIG, max_workers=2)
     assert rc == 0
 
 
-@patch("scraper.batch_history._process_batch_worker", return_value=[
-    {"status": "error", "error": "something broke"},
-])
-@patch("scraper.batch_history._discover_article_urls", return_value=["https://emergency.uw.edu/a/"])
+@patch(
+    "scraper.batch_history._process_batch_worker",
+    return_value=[
+        {"status": "error", "error": "something broke"},
+    ],
+)
+@patch(
+    "scraper.batch_history._discover_article_urls",
+    return_value=["https://emergency.uw.edu/a/"],
+)
 @patch("scraper.batch_history.psycopg2.connect")
 def test_run_batch_returns_0_on_partial_errors(mock_pg, mock_discover, mock_worker):
     """One error but some inserts → still rc=0 (partial success is fine)."""
     mock_pg.return_value.cursor.return_value.__enter__.return_value.fetchall.return_value = []
     from scraper.batch_history import run_batch
+
     rc = run_batch(CONFIG, max_workers=1)
     # errors=1 but inserted=0 → rc=1; test confirms correct threshold
     assert rc == 1
@@ -373,6 +417,7 @@ def test_run_batch_returns_0_on_partial_errors(mock_pg, mock_discover, mock_work
 @patch("scraper.batch_history.psycopg2.connect")
 def test_run_batch_returns_0_when_nothing_to_process(mock_pg, mock_discover):
     from scraper.batch_history import run_batch
+
     rc = run_batch(CONFIG, max_workers=5)
     assert rc == 0
 ```
@@ -406,6 +451,7 @@ Usage:
     BATCH_WORKERS=50 python -m scraper.batch_history
     python -m scraper.batch_history --max-pages 30 --workers 20
 """
+
 import argparse
 import json
 import os
@@ -479,12 +525,17 @@ def _dispatch(name, inputs, db_conn, config, dry_run):
         payload["alert_type"] = "original"
         result = upsert_alert(db_conn, payload)
         if result["status"] == "inserted":
-            logger.info("insert_success", extra={
-                "incident_id": result.get("incident_id"),
-                "alert_id": result.get("alert_id"),
-            })
+            logger.info(
+                "insert_success",
+                extra={
+                    "incident_id": result.get("incident_id"),
+                    "alert_id": result.get("alert_id"),
+                },
+            )
         else:
-            logger.warning("duplicate_blocked", extra={"text_hash": result.get("text_hash")})
+            logger.warning(
+                "duplicate_blocked", extra={"text_hash": result.get("text_hash")}
+            )
         return result
     raise ValueError(f"Unknown tool: {name}")
 
@@ -531,9 +582,14 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
                     time.sleep(wait)
 
             if response.stop_reason == "end_turn":
-                logger.warning("agent_ended_without_terminal_tool",
-                               extra={"url": article.get("article_url")})
-                return {"status": "error", "error": "agent ended without calling upsert_alert"}
+                logger.warning(
+                    "agent_ended_without_terminal_tool",
+                    extra={"url": article.get("article_url")},
+                )
+                return {
+                    "status": "error",
+                    "error": "agent ended without calling upsert_alert",
+                }
 
             tool_results = []
             last_result = {}
@@ -541,12 +597,16 @@ def run_batch_agent(article: dict, config: dict, db_conn) -> dict:
             for block in response.content:
                 if block.type == "tool_use":
                     logger.info("tool_call", extra={"tool": block.name})
-                    result = _dispatch(block.name, block.input, db_conn, config, dry_run)
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(result),
-                    })
+                    result = _dispatch(
+                        block.name, block.input, db_conn, config, dry_run
+                    )
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": json.dumps(result),
+                        }
+                    )
                     if block.name == TERMINAL_TOOL:
                         last_result = result
 
@@ -566,7 +626,9 @@ def _try_scrape_article_urls(page_num: int) -> list:
     try:
         urls = scrape_article_urls(page_num)
         if urls:
-            logger.info("page_scraped", extra={"page": page_num, "url_count": len(urls)})
+            logger.info(
+                "page_scraped", extra={"page": page_num, "url_count": len(urls)}
+            )
         return urls
     except ScrapingError as e:
         logger.debug("page_scrape_failed", extra={"page": page_num, "error": str(e)})
@@ -626,7 +688,9 @@ def _process_batch_worker(urls: list, config: dict) -> list:
             try:
                 article = scrape_article(url)
             except ScrapingError as e:
-                logger.error("article_scrape_failed", extra={"url": url, "error": str(e)})
+                logger.error(
+                    "article_scrape_failed", extra={"url": url, "error": str(e)}
+                )
                 results.append({"status": "error", "error": str(e), "url": url})
                 continue
             result = run_batch_agent(article, config, db_conn)
@@ -651,7 +715,7 @@ def _chunk(lst: list, n: int) -> list:
     chunks, i = [], 0
     for chunk_idx in range(n):
         size = k + (1 if chunk_idx < rem else 0)
-        chunks.append(lst[i: i + size])
+        chunks.append(lst[i : i + size])
         i += size
     return [c for c in chunks if c]
 
@@ -668,7 +732,9 @@ def run_batch(
     Returns 0 on success or partial success; 1 only if nothing was inserted
     and there were errors (indicating a systemic failure).
     """
-    n_workers = max_workers or int(os.environ.get("BATCH_WORKERS", DEFAULT_PROCESS_WORKERS))
+    n_workers = max_workers or int(
+        os.environ.get("BATCH_WORKERS", DEFAULT_PROCESS_WORKERS)
+    )
 
     # Phase 1: discover URLs
     all_urls = _discover_article_urls(start_page, end_page, max_pages)
@@ -676,7 +742,9 @@ def run_batch(
 
     # Phase 2: pre-filter
     dry_run = os.environ.get("DRY_RUN", "").lower() == "true"
-    fresh_urls = all_urls if dry_run else _prefilter_known_urls(all_urls, config["DATABASE_URL"])
+    fresh_urls = (
+        all_urls if dry_run else _prefilter_known_urls(all_urls, config["DATABASE_URL"])
+    )
     pre_skipped = len(all_urls) - len(fresh_urls)
 
     stats = {
@@ -695,14 +763,19 @@ def run_batch(
     # Phase 3: parallel workers, each with a batch of URLs
     actual_workers = min(n_workers, len(fresh_urls))
     batches = _chunk(fresh_urls, actual_workers)
-    logger.info("processing_start", extra={
-        "urls_to_process": len(fresh_urls),
-        "workers": actual_workers,
-        "batch_size": len(batches[0]) if batches else 0,
-    })
+    logger.info(
+        "processing_start",
+        extra={
+            "urls_to_process": len(fresh_urls),
+            "workers": actual_workers,
+            "batch_size": len(batches[0]) if batches else 0,
+        },
+    )
 
     with ThreadPoolExecutor(max_workers=actual_workers) as executor:
-        futures = [executor.submit(_process_batch_worker, batch, config) for batch in batches]
+        futures = [
+            executor.submit(_process_batch_worker, batch, config) for batch in batches
+        ]
         for fut in as_completed(futures):
             for result in fut.result():
                 status = result.get("status", "error")
@@ -712,10 +785,13 @@ def run_batch(
                     stats["duplicates"] += 1
                 else:
                     stats["errors"] += 1
-                    logger.error("article_failed", extra={
-                        "url": result.get("url", ""),
-                        "error": result.get("error", "unknown"),
-                    })
+                    logger.error(
+                        "article_failed",
+                        extra={
+                            "url": result.get("url", ""),
+                            "error": result.get("error", "unknown"),
+                        },
+                    )
 
     logger.info("batch_complete", extra=stats)
     _print_summary(stats)
@@ -732,20 +808,30 @@ def _print_summary(stats: dict) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parallel UW Alerts history scraper")
-    parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES,
-                        help=f"Max page number to scan (default {DEFAULT_MAX_PAGES})")
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=DEFAULT_MAX_PAGES,
+        help=f"Max page number to scan (default {DEFAULT_MAX_PAGES})",
+    )
     parser.add_argument("--start-page", type=int, default=DEFAULT_MAX_PAGES)
     parser.add_argument("--end-page", type=int, default=1)
-    parser.add_argument("--workers", type=int, default=None,
-                        help=f"Parallel workers (default BATCH_WORKERS env or {DEFAULT_PROCESS_WORKERS})")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help=f"Parallel workers (default BATCH_WORKERS env or {DEFAULT_PROCESS_WORKERS})",
+    )
     args = parser.parse_args()
-    sys.exit(run_batch(
-        load_config(),
-        start_page=args.start_page,
-        end_page=args.end_page,
-        max_pages=args.max_pages,
-        max_workers=args.workers,
-    ))
+    sys.exit(
+        run_batch(
+            load_config(),
+            start_page=args.start_page,
+            end_page=args.end_page,
+            max_pages=args.max_pages,
+            max_workers=args.workers,
+        )
+    )
 ```
 
 - [ ] **Step 4: Run the new batch_history tests**

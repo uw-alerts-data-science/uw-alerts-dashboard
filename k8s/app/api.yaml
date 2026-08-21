@@ -1,3 +1,5 @@
+# The image tag below is a placeholder — push-api-image.yml runs
+# `kubectl set image` to the real just-built tag on every deploy.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,7 +21,7 @@ spec:
     spec:
       containers:
         - name: api
-          image: registry.digitalocean.com/uwalerts/uw-alerts-api:8002f8a
+          image: registry.digitalocean.com/uwalerts/uw-alerts-api:latest
           imagePullPolicy: IfNotPresent
 
           ports:

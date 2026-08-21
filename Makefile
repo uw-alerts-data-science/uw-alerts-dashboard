@@ -1,16 +1,32 @@
-# This Makefile covers scraper operations only.
-# Database + container management lives in poe (see `uv run poe --help`):
-#   poe setup / poe db-seed / poe db-down / poe dev
+# Single entry point for local dev: full-stack container orchestration
+# (postgres + api + frontend, via docker compose) and scraper operations.
+# Container/DB commands here wrap the underlying `poe`/`docker compose`
+# calls (see `uv run poe --help`) so there's one interface to remember.
 DB_TEST     = uw_alerts_test
 DB_USER     = postgres
 DB_PASSWORD = postgres
 DB_PORT     = 5432
 TEST_DB_URL = postgres://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_TEST)
 
-.PHONY: run dry-run batch-history batch-history-dry seed audit test test-scraper test-scraper-full lint help
+.PHONY: up down setup dev scraper run dry-run batch-history batch-history-dry seed audit test test-scraper test-scraper-full lint help
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+up: ## Build and start postgres + api + frontend (docker compose up --build)
+	docker compose up --build
+
+down: ## Stop all containers (keeps the postgres_data volume)
+	uv run poe db-down
+
+setup: ## Start postgres, apply schema, seed DB, install git hooks (no frontend/api)
+	uv run poe setup
+
+dev: ## Full local dev: setup, then tail the API container logs
+	uv run poe dev
+
+scraper: ## Run the scraper once against the compose stack (profile: jobs)
+	docker compose --profile jobs run --rm scraper
 
 run: ## Run the scraper agent once (requires .env or exported env vars)
 	set -a && . ./.env && set +a && .venv/bin/python -m scraper.agent
