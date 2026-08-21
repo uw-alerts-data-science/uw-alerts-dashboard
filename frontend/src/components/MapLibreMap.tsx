@@ -338,8 +338,73 @@ export default function MapLibreMap({
     };
   }, [filteredAlerts]);
 
-  const historicalPeakHourStats = useMemo(() => {
-    const hourCounts = Array.from({ length: 24 }, () => 0);
+  // const historicalPeakHourStats = useMemo(() => {
+  //   const hourCounts = Array.from({ length: 24 }, () => 0);
+
+  //   let incidentsWithValidTimes = 0;
+  //   let unavailableTimeCount = 0;
+
+  //   for (const alert of filteredAlerts) {
+  //     if (!alert.reportedAt) {
+  //       unavailableTimeCount += 1;
+  //       continue;
+  //     }
+
+  //     const reportedDate = new Date(alert.reportedAt);
+
+  //     if (Number.isNaN(reportedDate.getTime())) {
+  //       unavailableTimeCount += 1;
+  //       continue;
+  //     }
+
+  //     const hourPart = pacificHourFormatter
+  //       .formatToParts(reportedDate)
+  //       .find((part) => part.type === "hour");
+
+  //     const hour = Number(hourPart?.value);
+
+  //     if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+  //       unavailableTimeCount += 1;
+  //       continue;
+  //     }
+
+  //     hourCounts[hour] += 1;
+  //     incidentsWithValidTimes += 1;
+  //   }
+
+  //   if (incidentsWithValidTimes === 0) {
+  //     return {
+  //       hour: null,
+  //       label: "No data",
+  //       count: 0,
+  //       percentage: 0,
+  //       unavailableTimeCount,
+  //     };
+  //   }
+
+  //   let peakHour = 0;
+  //   let peakCount = hourCounts[0];
+
+  //   for (let hour = 1; hour < hourCounts.length; hour += 1) {
+  //     if (hourCounts[hour] > peakCount) {
+  //       peakHour = hour;
+  //       peakCount = hourCounts[hour];
+  //     }
+  //   }
+
+  //   return {
+  //     hour: peakHour,
+  //     label: formatHourLabel(peakHour),
+  //     count: peakCount,
+  //     percentage: Math.round(
+  //       (peakCount / incidentsWithValidTimes) * 100
+  //     ),
+  //     unavailableTimeCount,
+  //   };
+  // }, [filteredAlerts]);
+
+  const historicalTwoHourStats = useMemo(() => {
+    const bucketCounts = Array.from({ length: 12 }, () => 0);
 
     let incidentsWithValidTimes = 0;
     let unavailableTimeCount = 0;
@@ -368,40 +433,62 @@ export default function MapLibreMap({
         continue;
       }
 
-      hourCounts[hour] += 1;
+      const bucketIndex = Math.floor(hour / 2);
+
+      bucketCounts[bucketIndex] += 1;
       incidentsWithValidTimes += 1;
     }
 
-    if (incidentsWithValidTimes === 0) {
-      return {
-        hour: null,
-        label: "No data",
-        count: 0,
-        percentage: 0,
-        unavailableTimeCount,
-      };
-    }
+    const labels = [
+      "12–2 AM",
+      "2–4 AM",
+      "4–6 AM",
+      "6–8 AM",
+      "8–10 AM",
+      "10–12 PM",
+      "12–2 PM",
+      "2–4 PM",
+      "4–6 PM",
+      "6–8 PM",
+      "8–10 PM",
+      "10–12 AM",
+    ];
 
-    let peakHour = 0;
-    let peakCount = hourCounts[0];
+    const maxCount = Math.max(1, ...bucketCounts);
 
-    for (let hour = 1; hour < hourCounts.length; hour += 1) {
-      if (hourCounts[hour] > peakCount) {
-        peakHour = hour;
-        peakCount = hourCounts[hour];
+    let peakIndex: number | null = null;
+    let peakCount = 0;
+
+    if (incidentsWithValidTimes > 0) {
+      peakIndex = 0;
+      peakCount = bucketCounts[0];
+
+      for (let index = 1; index < bucketCounts.length; index += 1) {
+        if (bucketCounts[index] > peakCount) {
+          peakIndex = index;
+          peakCount = bucketCounts[index];
+        }
       }
     }
 
     return {
-      hour: peakHour,
-      label: formatHourLabel(peakHour),
-      count: peakCount,
-      percentage: Math.round(
-        (peakCount / incidentsWithValidTimes) * 100
-      ),
+      buckets: bucketCounts.map((count, index) => ({
+        index,
+        count,
+        label: labels[index],
+        percentageOfPeak: count / maxCount,
+      })),
+      maxCount,
+      peakIndex,
+      peakCount,
+      peakLabel:
+        peakIndex === null ? "No data" : labels[peakIndex],
+      totalWithValidTimes: incidentsWithValidTimes,
       unavailableTimeCount,
     };
   }, [filteredAlerts]);
+
+
 
 
   const historicalTimelineData = useMemo<HistoricalTimelinePoint[]>(() => {
@@ -1063,28 +1150,208 @@ export default function MapLibreMap({
                 </span>
               </article>
 
-              <article className="historical-summary-card">
-                <h2>Data Analytics Under Construction</h2>
-              </article>
-              <article className="historical-summary-card">
-                <h2>Peak Hour</h2>
+              <article className="historical-summary-card historical-hourly-card">
+                <div className="historical-hourly-heading">
+                  <h2>Activity by Time of Day</h2>
+                  <span>Pacific Time</span>
+                </div>
 
-                <strong className="historical-summary-value historical-summary-category">
-                  {isLoading ? "—" : historicalPeakHourStats.label}
-                </strong>
+                {isLoading ? (
+                  <p className="historical-chart-empty">
+                    Loading incident data...
+                  </p>
+                ) : historicalTwoHourStats.totalWithValidTimes === 0 ? (
+                  <p className="historical-chart-empty">
+                    No valid incident times available.
+                  </p>
+                ) : (
+                  <div className="historical-hourly-content">
+                    <svg
+                      className="historical-hourly-radial"
+                      viewBox="0 0 240 240"
+                      role="img"
+                      aria-label="Incidents by two-hour period of day"
+                    >
+                      {historicalTwoHourStats.buckets.map((item) => {
+                        /*
+                         * Each two-hour period occupies 30 degrees.
+                         * Leaving about 3 degrees empty creates a small gap
+                         * between neighboring wedges.
+                         */
+                        const sectionAngle = 360 / 12;
+                        const gap = 3;
+                      
+                        const startAngle =
+                          item.index * sectionAngle -
+                          90 +
+                          gap / 2;
+                      
+                        const endAngle =
+                          (item.index + 1) * sectionAngle -
+                          90 -
+                          gap / 2;
+                      
+                        const innerRadius = 43;
+                      
+                        /*
+                         * Even periods with no incidents retain a very short
+                         * wedge so all 12 time periods remain visible.
+                         */
+                        const minimumOuterRadius = 53;
+                        const maximumOuterRadius = 94;
+                      
+                        const outerRadius =
+                          item.count === 0
+                            ? minimumOuterRadius
+                            : minimumOuterRadius +
+                              item.percentageOfPeak *
+                                (maximumOuterRadius - minimumOuterRadius);
+                      
+                        const centerX = 120;
+                        const centerY = 120;
+                      
+                        const toRadians = (degrees: number) =>
+                          (degrees * Math.PI) / 180;
+                      
+                        const pointAt = (
+                          radius: number,
+                          angle: number
+                        ) => ({
+                          x:
+                            centerX +
+                            radius * Math.cos(toRadians(angle)),
+                          y:
+                            centerY +
+                            radius * Math.sin(toRadians(angle)),
+                        });
+                      
+                        const innerStart = pointAt(
+                          innerRadius,
+                          startAngle
+                        );
+                      
+                        const innerEnd = pointAt(
+                          innerRadius,
+                          endAngle
+                        );
+                      
+                        const outerStart = pointAt(
+                          outerRadius,
+                          startAngle
+                        );
+                      
+                        const outerEnd = pointAt(
+                          outerRadius,
+                          endAngle
+                        );
+                      
+                        const path = [
+                          `M ${innerStart.x} ${innerStart.y}`,
+                          `L ${outerStart.x} ${outerStart.y}`,
+                          `A ${outerRadius} ${outerRadius} 0 0 1 ${outerEnd.x} ${outerEnd.y}`,
+                          `L ${innerEnd.x} ${innerEnd.y}`,
+                          `A ${innerRadius} ${innerRadius} 0 0 0 ${innerStart.x} ${innerStart.y}`,
+                          "Z",
+                        ].join(" ");
+                      
+                        const isPeak =
+                          item.index ===
+                          historicalTwoHourStats.peakIndex;
+                      
+                        return (
+                          <path
+                            key={item.index}
+                            d={path}
+                            className={
+                              isPeak
+                                ? "historical-hourly-wedge historical-hourly-wedge-peak"
+                                : "historical-hourly-wedge"
+                            }
+                            style={{
+                              opacity:
+                                item.count === 0
+                                  ? 0.14
+                                  : 0.4 +
+                                    item.percentageOfPeak * 0.6,
+                            }}
+                          >
+                            <title>
+                              {item.label}: {item.count}{" "}
+                              {item.count === 1
+                                ? "incident"
+                                : "incidents"}
+                            </title>
+                          </path>
+                        );
+                      })}
 
-                <span className="historical-summary-description">
-                  {historicalPeakHourStats.count > 0
-                    ? `${historicalPeakHourStats.count} incidents · ${
-                        historicalPeakHourStats.percentage
-                      }% of incidents`
-                    : "No valid incident times available"}
-                </span>
+                      {/* Time labels around the outside */}
+                      {historicalTwoHourStats.buckets.map((item) => {
+                        const angle =
+                          ((item.index + 0.5) / 12) *
+                            Math.PI *
+                            2 -
+                          Math.PI / 2;
+                      
+                        const labelRadius = 110;
+                      
+                        const x =
+                          120 + Math.cos(angle) * labelRadius;
+                      
+                        const y =
+                          120 + Math.sin(angle) * labelRadius;
+                      
+                        return (
+                          <text
+                            key={`label-${item.index}`}
+                            x={x}
+                            y={y}
+                            className="historical-hourly-label"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                          >
+                            {item.label}
+                          </text>
+                        );
+                      })}
+
+                      {/* Inner circle */}
+                      <circle
+                        cx="120"
+                        cy="120"
+                        r="38"
+                        className="historical-hourly-center"
+                      />
+
+                      <text
+                        x="120"
+                        y="116"
+                        className="historical-hourly-peak-value"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
+                        {historicalTwoHourStats.peakLabel}
+                      </text>
                     
-                {historicalPeakHourStats.count > 0 && (
-                  <span className="historical-summary-description">
-                    Pacific Time
-                  </span>
+                      <text
+                        x="120"
+                        y="132"
+                        className="historical-hourly-peak-label"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                      >
+                        PEAK
+                      </text>
+                    </svg>
+                    
+                    <span className="historical-hourly-summary">
+                      {historicalTwoHourStats.peakCount}{" "}
+                      {historicalTwoHourStats.peakCount === 1
+                        ? "incident"
+                        : "incidents"}{" "}
+                      during the busiest two-hour period
+                    </span>
+                  </div>
                 )}
               </article>
             </div>

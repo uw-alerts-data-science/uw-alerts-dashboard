@@ -871,7 +871,7 @@ button {
 
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(145px, 1fr));
+  grid-template-rows: auto auto;
   gap: 16px;
 }
 
@@ -1203,20 +1203,129 @@ button {
   font-size: 12px;
 }
 
-@media (max-width: 1100px) {
-  .historical-dashboard-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas:
-      "map map"
-      "stats stats"
-      "timeline timeline"
-      "bottom bottom";
-  }
 
-  .historical-map-panel {
-    min-height: 460px;
-  }
+/* Two-hour radial activity chart */
+
+.historical-hourly-card {
+  grid-column: 1 / -1;
+
+  display: flex;
+  flex-direction: column;
+
+  min-height: 275px;
+  padding: 20px 24px;
 }
+
+.historical-hourly-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.historical-hourly-heading h2 {
+  font-size: 13px;
+}
+
+.historical-hourly-heading span {
+  color: var(--historical-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.historical-hourly-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+
+  flex: 1;
+  min-height: 0;
+  margin-top: 4px;
+}
+
+.historical-hourly-radial {
+  display: block;
+
+  width: 235px;
+  height: 235px;
+
+  flex: 0 0 235px;
+
+  overflow: visible;
+}
+
+.historical-hourly-wedge {
+  fill: #956fd0;
+
+  stroke: #130d19;
+  stroke-width: 1;
+
+  transition:
+    opacity 160ms ease,
+    filter 160ms ease;
+}
+
+.historical-hourly-wedge:hover {
+  opacity: 1 !important;
+  filter: brightness(1.25);
+}
+
+.historical-hourly-wedge-peak {
+  fill: #e0ad57;
+}
+
+.historical-hourly-center {
+  fill: #17101f;
+
+  stroke: #392b48;
+  stroke-width: 1;
+}
+
+.historical-hourly-label {
+  fill: #a89bb8;
+
+  font-size: 7.5px;
+  font-weight: 650;
+
+  pointer-events: none;
+}
+
+.historical-hourly-peak-value {
+  fill: #e0ad57;
+
+  font-size: 10px;
+  font-weight: 800;
+
+  pointer-events: none;
+}
+
+.historical-hourly-peak-label {
+  fill: #887a99;
+
+  font-size: 6px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+
+  pointer-events: none;
+}
+
+.historical-hourly-summary {
+  max-width: 130px;
+
+  color: var(--historical-muted);
+
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+
+
+
+
+
+
+
 
 /* Mobile layout */
 
@@ -1466,6 +1575,26 @@ button {
 
   .historical-timeline-chart {
     height: 210px;
+  }
+    .historical-hourly-card {
+    grid-column: auto;
+    min-height: 260px;
+    padding: 18px;
+  }
+
+  .historical-hourly-content {
+    justify-content: center;
+  }
+
+  .historical-hourly-radial {
+    width: 220px;
+    height: 220px;
+
+    flex-basis: 220px;
+  }
+
+  .historical-hourly-summary {
+    display: none;
   }
 }
 
